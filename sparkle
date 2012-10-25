@@ -1,0 +1,123 @@
+#!/usr/bin/python -tt
+
+# Twisted hosts our RESTful APIs and help with 0MQ events.
+from twisted.internet import reactor
+from twisted.web.server import Site
+from twisted.web.wsgi import WSGIResource
+
+# 0MQ takes care of all messaging.
+from ponycloud.common.tzmq import Router
+
+# Data are stored in a PostgreSQL database.
+import sqlsoup
+
+# Command line arguments follow the GNU conventions.
+from getopt import gnu_getopt
+from sys import argv
+
+# Configuration is stored in a boring ini file.
+from ConfigParser import ConfigParser
+
+# The application itself also comes in handy... ;-)
+from ponycloud.sparkle import *
+
+# Top-level RESTful API endpoints to be automatically mapped to
+# database and manager and everything...
+TOP_API_ENDPOINTS = ['tenant', 'user', 'image', 'vswitch', 'host',
+                     'cpu_profile', 'storage_pool', 'disk']
+
+if __name__ == '__main__':
+    def do_start(config):
+        # Internal 0MQ router to handle Twilight and Luna traffic.
+        router = Router(identity='sparkle')\
+                    .bind(config.get('zmq', 'endpoint'))
+
+        # Prepare the database connection.
+        db = sqlsoup.SQLSoup(config.get('db', 'url'))
+
+        # TODO: Move this to manager.
+        #       We need to retry if the database is down.
+        relate(db)
+
+        # LOAD EVERYTHANG!
+        # TODO: Do this from manager and retry as needed.
+        #       Seriously! Do it!
+        data = {}
+        for entity_name in TOP_API_ENDPOINTS:
+            data[entity_name] = select_all_dicts(getattr(db, entity_name))
+
+        # Prepare the manager that takes care of business logic.
+        manager = Manager(router)
+
+        # Inject data to manager.
+        # TODO: What have I said about moving things to manager!
+        #       For now, only host data.
+        for host in data['host']:
+            manager.config['children']['host'][host['uuid']] = {
+                'children': {},
+                'desired': host,
+                'current': {}
+            }
+            for key in host.keys():
+                if key.endswith('_list'):
+                    del host[key]
+
+        # Dispatch events to manager.
+        router.on_message = make_event_handler(manager)
+
+        # Generate and otherwise conjure the public API.
+        api = make_public_api(manager, db, TOP_API_ENDPOINTS)
+
+        # Prepare the public and private REST API sites for twisted.
+        site = Site(WSGIResource(reactor, reactor.getThreadPool(), api))
+
+        # Bind the API to it's address.
+        reactor.listenTCP(int(config.get('http', 'port')), site,
+                          interface=config.get('http', 'host'))
+
+        # Schedule call to the manager.
+        reactor.callLater(0, manager.start)
+
+        # Run twisted.
+        reactor.run()
+
+
+    def do_help(*args, **kwargs):
+        print 'Usage: sparkle [--config=/etc/cloud/sparkle.ini]'
+        print 'Runs sparkle daemon with given configuration.'
+        print ''
+        print 'OPTIONS:'
+        print '  --help, -h          Display this help.'
+        print '  --version, -V       Display version info.'
+        print ''
+        print '  --config, -c file   Load alternative configuration file.'
+        print '                      Defaults to /etc/cloud/sparkle.ini.'
+        print ''
+        print 'Report bugs at <http://github.com/ponycloud/>.'
+
+    def do_version(*args, **kwargs):
+        print 'sparkle (PonyCloud) 1'
+
+    # Parse command line arguments.
+    opts, args = gnu_getopt(argv, 'hVc:', ['help', 'version', 'config='])
+
+    action = do_start
+    config_path = '/etc/cloud/sparkle.ini'
+
+    for k, v in opts:
+        if k in ('--help', '-h'):
+            action = do_help
+        elif k in ('--version', '-V'):
+            action = do_version
+        elif k in ('--config', '-c'):
+            config_path = v
+
+    # Load the configuration from file.
+    config = ConfigParser()
+    config.read(config_path)
+
+    # Perform the selected action.
+    action(config=config)
+
+# vim:set sw=4 ts=4 et:
+# -*- coding: utf-8 -*-

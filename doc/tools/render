@@ -1,0 +1,18 @@
+#!/bin/bash -e
+
+base="$(realpath "$(dirname "${0}")")"
+
+for f in "${@}"; do
+	echo "render ${f} -> ${f%.md}.html"
+	(
+		cd "$(dirname "${f}")"
+		f="$(basename "${f}")"
+		pandoc \
+			--self-contained \
+			--standalone \
+			--css="${base}/style.css" \
+			-f markdown -t html5 -o "${f%.md}.html" "${f}"
+	)
+done
+
+# EOF
