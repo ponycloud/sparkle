@@ -23,15 +23,17 @@ def select_dict(entity, **primary_keys):
     """
     return soup_2_dict_type(soup2dict(entity.filter_by(**primary_keys).one()))
 
-def select_all_dicts(entity):
+def select_all_dicts(entity, **filters):
     """
     Selects all instances of specified entity as a list of dictionaries.
 
     entity -- sqlsoup entity
+    filters -- key/value pairs to filter entities by
     """
-    return [soup_2_dict_type(soup2dict(en)) for en in entity.all()]
+    return [soup_2_dict_type(soup2dict(en))
+            for en in entity.filter_by(**filters).all()]
 
-def soup2dict(obj, visited=None):
+def soup2dict(obj):
     """
     Converts sqlsoup entity (+ related entities) to dictionary.
 
@@ -39,24 +41,21 @@ def soup2dict(obj, visited=None):
     visited -- list of already visitied related elements (internal use)
     """
 
-    if visited is None:
-        visited = []
-
     if hasattr(obj, '_table'):
-        if obj._table.name in visited:
-            return None
-
-        visited.append(obj._table.name)
-
-        # ignore internal properties (_*) and column list (c)
         fields = {}
-        for field in [x for x in dir(obj) if not x.startswith('_') and x != 'c']:
-            fields[field] = soup2dict(getattr(obj, field), visited)
+
+        for field in dir(obj):
+            if field.startswith('_') or field == 'c':
+                # Ignore private properties.
+                continue
+
+            fields[field] = soup2dict(getattr(obj, field))
 
         return fields
 
     elif isinstance(obj, list):
-        return [soup2dict(list_item, visited) for list_item in obj]
+        return [soup2dict(list_item) for list_item in obj]
+
     else:
         return obj
 

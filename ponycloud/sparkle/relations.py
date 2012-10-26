@@ -7,7 +7,8 @@ def relate(db):
     db.tenant.relate('instance_list', db.instance)
     db.tenant.relate('user_list', db.tenant_user)
     db.tenant.relate('image_list', db.image)
-    db.tenant.relate('vswitch_list', db.vswitch)
+    db.tenant.relate('switch_list', db.switch,
+                                    secondary=db.tenant_switch._table)
     db.tenant.relate('cluster_list', db.cluster)
     db.tenant.relate('volume_list', db.volume)
     db.tenant.relate('quota_list', db.quota)
@@ -16,12 +17,10 @@ def relate(db):
     db.instance.relate('vnic_list', db.vnic)
     db.instance.relate('cluster_list', db.cluster_instance)
 
-    db.vdisk.relate('volume_item', db.volume)
-
     db.vnic.relate('address_list', db.address)
 
-    db.vswitch.relate('network_list', db.network)
-    db.vswitch.relate('vnic_list', db.vnic)
+    db.switch.relate('network_list', db.network)
+    db.switch.relate('vnic_list', db.vnic)
 
     db.network.relate('route_list', db.route)
 

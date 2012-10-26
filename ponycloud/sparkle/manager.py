@@ -22,13 +22,7 @@ class Manager(object):
 
         # Dictionary with desired and current configuration of all
         # managed entities.  Beware, potentially extremely large.
-        self.config = {
-            'children': {
-                'host': {},
-             },
-            'desired': {},
-            'current': {},
-        }
+        self.config = {'children': {}}
 
     def start(self):
         """

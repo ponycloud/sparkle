@@ -130,12 +130,16 @@ def register_collection_handler(app, manager, path):
             #       Use blockingCallFromThread() and ask manager nicely!
             #
 
-            # Find the parent entity.
-            parent = find_config(manager.config, path[:-1], kwargs)
+            try:
+                # Find the parent entity.
+                parent = find_config(manager.config, path[:-1], kwargs)
 
-            # Look for the collection.
-            if path[-1][0] not in parent['children']:
-                raise NotFound
+                # Look for the collection.
+                if path[-1][0] not in parent['children']:
+                    raise NotFound
+            except NotFound:
+                # Show none instead of hard-failing.
+                return {'total': 0, 'items': {}}
 
             # The collection in question.
             collection = parent['children'][path[-1][0]]
