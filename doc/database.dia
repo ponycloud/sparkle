@@ -5305,7 +5305,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#int#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#Virtual switch identifier, vlan tag for *vlan* or network id for *vxlan*.#</dia:string>
+            <dia:string>#Virtual switch identifier, vlan tag for *bridge* or network id for *vxlan*.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>
