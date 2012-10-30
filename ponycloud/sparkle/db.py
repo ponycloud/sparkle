@@ -7,12 +7,32 @@ import sqlsoup
 import psycopg2
 import psycopg2.extras
 import decimal
+import cjson
 
 from ponycloud.common.util import uuidgen
 
 psycopg2.extras.register_inet()
 psycopg2.extensions.register_type(psycopg2.extensions.new_array_type((1041,), "INETARRAY", psycopg2.extensions.INET))
 psycopg2.extensions.register_type(psycopg2.extensions.INETARRAY)
+
+def adapt_dict(value):
+    return psycopg2.extensions.AsIs("'%s'" % cjson.encode(value))
+
+def cast_json(value, cur):
+   if value is None:
+      return None
+   try:
+      o = cjson.decode(value)
+      return o
+   except:
+      raise InterfaceError("bad JSON representation: %r" % value)
+
+json= psycopg2.extensions.new_type((114,), "json", cast_json)
+psycopg2.extensions.register_type(json)
+psycopg2.extensions.register_type(psycopg2.extensions.new_array_type((199,), "json[]", json)) 
+
+psycopg2.extensions.register_adapter(dict, adapt_dict)
+
 
 def select_dict(entity, **primary_keys):
     """
