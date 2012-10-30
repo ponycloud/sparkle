@@ -21,19 +21,6 @@ from ConfigParser import ConfigParser
 # The application itself also comes in handy... ;-)
 from ponycloud.sparkle import *
 
-# Top-level RESTful API endpoints to be automatically mapped to
-# database and manager and everything...
-TOP_API_ENDPOINTS = {
-    'tenant':        {},
-    'user':          {},
-    'image':         {'tenant': None},
-    'switch':        {'tenant': None},
-    'host':          {},
-    'cpu_profile':   {},
-    'storage_pool':  {},
-    'disk':          {},
-}
-
 if __name__ == '__main__':
     def do_start(config):
         # Internal 0MQ router to handle Twilight and Luna traffic.
@@ -43,61 +30,20 @@ if __name__ == '__main__':
         # Prepare the database connection.
         db = sqlsoup.SQLSoup(config.get('db', 'url'))
 
-        # TODO: Move this to manager.
-        #       We need to retry if the database is down.
-        relate(db)
-
-        # LOAD EVERYTHANG!
-        # TODO: Do this from manager and retry as needed.
-        #       Seriously! Do it!
-        print 'loading data'
-        data = {}
-        for entity_name, filters in TOP_API_ENDPOINTS.items():
-            data[entity_name] = select_all_dicts(getattr(db, entity_name), **filters)
-            print '  loaded', len(data[entity_name]), entity_name
+        # Prepare the Sparkle API description.
+        api = make_sparkle_api()
 
         # Prepare the manager that takes care of business logic.
-        manager = Manager(router)
-
-        # Inject data to manager.
-        # TODO: What have I said about moving things to manager!
-        def inject(config, name, data):
-            config['children'][name] = {}
-
-            for item in data:
-                key = None
-                for possible_key in ('uuid', 'id', 'email', 'hwaddr'):
-                    if possible_key in item:
-                        key = item[possible_key]
-                        break
-
-                # TODO: Handle composite primary keys.
-                if key is None:
-                    continue
-                #assert key is not None
-
-                config['children'][name][key] = {
-                    'desired': item,
-                    'current': {},
-                }
-
-                for k, v in item.items():
-                    if k.endswith('_list'):
-                        config['children'][name][key].setdefault('children', {})
-                        inject(config['children'][name][key], k[:-5], v)
-                        del item [k]
-
-        for name, data in data.items():
-            inject(manager.config, name, data)
+        manager = Manager(router, api, db)
 
         # Dispatch events to manager.
         router.on_message = make_event_handler(manager)
 
-        # Generate and otherwise conjure the public API.
-        api = make_public_api(manager, db, TOP_API_ENDPOINTS)
+        # Generate and otherwise conjure the RESTful API.
+        app = make_sparkle_site(manager, db, api)
 
-        # Prepare the public and private REST API sites for twisted.
-        site = Site(WSGIResource(reactor, reactor.getThreadPool(), api))
+        # Prepare the public REST API site for twisted.
+        site = Site(WSGIResource(reactor, reactor.getThreadPool(), app))
 
         # Bind the API to it's address.
         reactor.listenTCP(int(config.get('http', 'port')), site,
