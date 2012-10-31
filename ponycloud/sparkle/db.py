@@ -1,6 +1,6 @@
 #!/usr/bin/python -tt
 
-__all__ = ['select_dict', 'select_all_dicts', 'insert_dict', 'update_dict']
+__all__ = ['select_dict', 'select_all_dicts', 'insert_dict', 'update_dict', 'delete_dict', 'get_changelog']
 
 import sqlalchemy
 import sqlsoup
@@ -27,7 +27,7 @@ def cast_json(value, cur):
    except:
       raise InterfaceError("bad JSON representation: %r" % value)
 
-json= psycopg2.extensions.new_type((114,), "json", cast_json)
+json = psycopg2.extensions.new_type((114,), "json", cast_json)
 psycopg2.extensions.register_type(json)
 psycopg2.extensions.register_type(psycopg2.extensions.new_array_type((199,), "json[]", json)) 
 
@@ -188,6 +188,30 @@ def soup_2_dict_type(data):
         return str(data)
 
     return data
+
+def delete_dict(db, entity_name, **primary_keys):
+    """
+    Deletes specified database entity.
+
+    db -- sqlsoup database
+    entity_name -- name of an entity to delete (corresponding to table name)
+    primary_keys -- keyword arguments with values of primary key(s), which will be deleted
+    """
+
+    entity = getattr(db, entity_name)
+    db.delete(entity.filter_by(**primary_keys).one())
+
+def get_changelog(db):
+    """
+    Returns the changelog and deletes it
+
+    db -- sqlsoup database
+    """
+
+    changelog = [(x.id, x.entity, x.old_data, x.new_data) \
+            for x in db.changelog.order_by(db.changelog.id).all()]
+    db.changelog.delete()
+    return changelog
 
 
 # vim:set sw=4 ts=4 et:
