@@ -16,16 +16,12 @@ psycopg2.extensions.register_type(psycopg2.extensions.new_array_type((1041,), "I
 psycopg2.extensions.register_type(psycopg2.extensions.INETARRAY)
 
 def adapt_dict(value):
-    return psycopg2.extensions.AsIs("'%s'" % cjson.encode(value))
+    return psycopg2.extensions.QuotedString(cjson.encode(value))
 
 def cast_json(value, cur):
-   if value is None:
-      return None
-   try:
-      o = cjson.decode(value)
-      return o
-   except:
-      raise InterfaceError("bad JSON representation: %r" % value)
+    if value is None:
+        return None
+    return cjson.decode(value)
 
 json = psycopg2.extensions.new_type((114,), "json", cast_json)
 psycopg2.extensions.register_type(json)
