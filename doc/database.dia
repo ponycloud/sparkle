@@ -1326,7 +1326,7 @@ Address layers to be used for transmit hashing.#</dia:string>
             <dia:boolean val="true"/>
           </dia:attribute>
           <dia:attribute name="unique">
-            <dia:boolean val="false"/>
+            <dia:boolean val="true"/>
           </dia:attribute>
         </dia:composite>
       </dia:attribute>
