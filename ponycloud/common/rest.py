@@ -29,7 +29,12 @@ class Flaskful(Flask):
 
         @self.errorhandler(404)
         def page_not_found(e):
-            return json_response({'error': 'not-found'}, 404)
+            return json_response({
+                'error': 'not-found',
+                'message': e.description \
+                                if not e.description.startswith('<p>') \
+                                else 'requested url was not found',
+            }, 404)
 
         @self.errorhandler(500)
         def internal_server_error(e):
