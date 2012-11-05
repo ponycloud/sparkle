@@ -68,7 +68,7 @@
         <dia:point val="38,-16"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="38,-16;45.075,-11.7"/>
+        <dia:rectangle val="38,-16;45.075,-12.5"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -80,7 +80,7 @@
         <dia:real val="7.0749999999999993"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
-        <dia:real val="4.3000000000000007"/>
+        <dia:real val="3.5"/>
       </dia:attribute>
       <dia:attribute name="text_colour">
         <dia:color val="#6969af"/>
@@ -186,26 +186,6 @@
           </dia:attribute>
           <dia:attribute name="nullable">
             <dia:boolean val="false"/>
-          </dia:attribute>
-          <dia:attribute name="unique">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-        </dia:composite>
-        <dia:composite type="table_attribute">
-          <dia:attribute name="name">
-            <dia:string>#vlan_tag#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="type">
-            <dia:string>#int#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="comment">
-            <dia:string>#VLAN to use in the core network.#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="primary_key">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-          <dia:attribute name="nullable">
-            <dia:boolean val="true"/>
           </dia:attribute>
           <dia:attribute name="unique">
             <dia:boolean val="false"/>
@@ -3272,7 +3252,7 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:point val="37,19.6"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="37,-11.7;43.7963,19.6"/>
+        <dia:rectangle val="37,-12.5;43.7963,19.6"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -3280,7 +3260,7 @@ Present is the default state, optional means that it does not necessarily need t
       <dia:attribute name="orth_points">
         <dia:point val="37,19.6"/>
         <dia:point val="43.3062,19.6"/>
-        <dia:point val="43.3062,-11.7"/>
+        <dia:point val="43.3062,-12.5"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
         <dia:enum val="0"/>
@@ -4112,16 +4092,16 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
     </dia:object>
     <dia:object type="Database - Reference" version="0" id="O38">
       <dia:attribute name="obj_pos">
-        <dia:point val="38,-11.7"/>
+        <dia:point val="38,-12.5"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="19.23,-11.7;38.49,-1.8"/>
+        <dia:rectangle val="19.23,-12.5;38.49,-1.8"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="38,-11.7"/>
+        <dia:point val="38,-12.5"/>
         <dia:point val="38,-11"/>
         <dia:point val="20,-11"/>
         <dia:point val="20,-1.8"/>
@@ -5767,16 +5747,16 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
     </dia:object>
     <dia:object type="Database - Reference" version="0" id="O55">
       <dia:attribute name="obj_pos">
-        <dia:point val="39.7687,-11.7"/>
+        <dia:point val="39.7687,-12.5"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="27.305,-11.7;40.2587,-7"/>
+        <dia:rectangle val="27.305,-12.5;40.2587,-7"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="39.7687,-11.7"/>
+        <dia:point val="39.7687,-12.5"/>
         <dia:point val="39.7687,-10"/>
         <dia:point val="29,-10"/>
         <dia:point val="29,-7"/>
@@ -6248,22 +6228,22 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
     </dia:object>
     <dia:object type="Database - Table" version="0" id="O59">
       <dia:attribute name="obj_pos">
-        <dia:point val="19,-22.5"/>
+        <dia:point val="19,-23.3"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="19,-22.5;25.305,-19"/>
+        <dia:rectangle val="19,-23.3;25.305,-19"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="elem_corner">
-        <dia:point val="19,-22.5"/>
+        <dia:point val="19,-23.3"/>
       </dia:attribute>
       <dia:attribute name="elem_width">
         <dia:real val="6.3049999999999997"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
-        <dia:real val="3.5"/>
+        <dia:real val="4.3000000000000007"/>
       </dia:attribute>
       <dia:attribute name="text_colour">
         <dia:color val="#6969af"/>
@@ -6278,7 +6258,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.10000000000000001"/>
       </dia:attribute>
       <dia:attribute name="name">
-        <dia:string>#tenant_user#</dia:string>
+        <dia:string>#member#</dia:string>
       </dia:attribute>
       <dia:attribute name="comment">
         <dia:string>#Assignment of users to tenants with their roles.#</dia:string>
@@ -6316,10 +6296,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       <dia:attribute name="attributes">
         <dia:composite type="table_attribute">
           <dia:attribute name="name">
-            <dia:string>#user#</dia:string>
+            <dia:string>#uuid#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
-            <dia:string>#varchar#</dia:string>
+            <dia:string>#uuid#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
             <dia:string>##</dia:string>
@@ -6336,6 +6316,26 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
         <dia:composite type="table_attribute">
           <dia:attribute name="name">
+            <dia:string>#user#</dia:string>
+          </dia:attribute>
+          <dia:attribute name="type">
+            <dia:string>#varchar#</dia:string>
+          </dia:attribute>
+          <dia:attribute name="comment">
+            <dia:string>##</dia:string>
+          </dia:attribute>
+          <dia:attribute name="primary_key">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+          <dia:attribute name="nullable">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+          <dia:attribute name="unique">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+        </dia:composite>
+        <dia:composite type="table_attribute">
+          <dia:attribute name="name">
             <dia:string>#tenant#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
@@ -6345,13 +6345,13 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>##</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
-            <dia:boolean val="true"/>
+            <dia:boolean val="false"/>
           </dia:attribute>
           <dia:attribute name="nullable">
             <dia:boolean val="false"/>
           </dia:attribute>
           <dia:attribute name="unique">
-            <dia:boolean val="true"/>
+            <dia:boolean val="false"/>
           </dia:attribute>
         </dia:composite>
         <dia:composite type="table_attribute">
@@ -6430,7 +6430,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O59" connection="15"/>
+        <dia:connection handle="0" to="O59" connection="17"/>
         <dia:connection handle="1" to="O0" connection="2"/>
       </dia:connections>
     </dia:object>
@@ -6490,7 +6490,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O59" connection="13"/>
+        <dia:connection handle="0" to="O59" connection="15"/>
         <dia:connection handle="1" to="O56" connection="6"/>
       </dia:connections>
     </dia:object>
@@ -7775,16 +7775,16 @@ Affected top-level entity type.#</dia:string>
     </dia:object>
     <dia:object type="Database - Reference" version="0" id="O74">
       <dia:attribute name="obj_pos">
-        <dia:point val="45.075,-11.7"/>
+        <dia:point val="45.075,-12.5"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="43.15,-11.7;45.565,24.65"/>
+        <dia:rectangle val="43.15,-12.5;45.565,24.65"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="45.075,-11.7"/>
+        <dia:point val="45.075,-12.5"/>
         <dia:point val="45.075,24.65"/>
         <dia:point val="43.15,24.65"/>
       </dia:attribute>
@@ -7833,16 +7833,16 @@ Affected top-level entity type.#</dia:string>
     </dia:object>
     <dia:object type="Database - Reference" version="0" id="O75">
       <dia:attribute name="obj_pos">
-        <dia:point val="41.5375,-11.7"/>
+        <dia:point val="41.5375,-12.5"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="39.15,-11.7;42.0275,-7.6"/>
+        <dia:rectangle val="39.15,-12.5;42.0275,-7.6"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="41.5375,-11.7"/>
+        <dia:point val="41.5375,-12.5"/>
         <dia:point val="41.5375,-7.6"/>
         <dia:point val="39.15,-7.6"/>
       </dia:attribute>
