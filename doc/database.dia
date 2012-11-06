@@ -3377,7 +3377,7 @@ Desired state of the instance.#</dia:string>
             <dia:string>#rcpu#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
-            <dia:string>#numeric#</dia:string>
+            <dia:string>#double#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
             <dia:string>#Number of reserved cpu threads. Must be equal or lower then vcpu.#</dia:string>
@@ -5859,7 +5859,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="30,-28"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="30,-28;38.615,-21.3"/>
+        <dia:rectangle val="30,-28;38.23,-21.3"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -5868,7 +5868,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="30,-28"/>
       </dia:attribute>
       <dia:attribute name="elem_width">
-        <dia:real val="8.6150000000000002"/>
+        <dia:real val="8.2300000000000004"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
         <dia:real val="6.6999999999999993"/>
@@ -6008,7 +6008,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#limit#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
-            <dia:string>#numeric#</dia:string>
+            <dia:string>#double#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
             <dia:string>#Type-specific amount.#</dia:string>
@@ -6090,7 +6090,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="43.3062,-16"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="38.615,-26.45;43.7963,-16"/>
+        <dia:rectangle val="38.23,-26.45;43.7963,-16"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -6098,7 +6098,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       <dia:attribute name="orth_points">
         <dia:point val="43.3062,-16"/>
         <dia:point val="43.3062,-25.8"/>
-        <dia:point val="38.615,-25.8"/>
+        <dia:point val="38.23,-25.8"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
         <dia:enum val="1"/>
@@ -6544,7 +6544,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#amount#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
-            <dia:string>#numeric#</dia:string>
+            <dia:string>#double#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
             <dia:string>#Consumed amount.#</dia:string>

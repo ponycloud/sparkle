@@ -1,5 +1,6 @@
 #!/usr/bin/python -tt
 
+from model import *
 from manager import *
 from events import *
 from api import *

@@ -30,17 +30,14 @@ if __name__ == '__main__':
         # Prepare the database connection.
         db = sqlsoup.SQLSoup(config.get('db', 'url'))
 
-        # Prepare the Sparkle API description.
-        api = make_sparkle_api()
-
         # Prepare the manager that takes care of business logic.
-        manager = Manager(router, api, db)
+        manager = Manager(router, db)
 
         # Dispatch events to manager.
         router.on_message = make_event_handler(manager)
 
         # Generate and otherwise conjure the RESTful API.
-        app = make_sparkle_site(manager, db, api)
+        app = make_sparkle_app(manager)
 
         # Prepare the public REST API site for twisted.
         site = Site(WSGIResource(reactor, reactor.getThreadPool(), app))

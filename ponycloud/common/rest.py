@@ -4,6 +4,8 @@ __all__ = ['Flaskful', 'json_response']
 
 from flask import Flask, make_response, request
 
+from traceback import print_exc
+
 from functools import wraps
 from simplejson import dumps
 
@@ -26,6 +28,13 @@ class Flaskful(Flask):
         Performs REST API initialization.
         """
         super(Flaskful, self).__init__(*args, **kwargs)
+
+        @self.errorhandler(400)
+        def bad_request(e):
+            return json_response({
+                'error': 'bad-request',
+                'message': e.description.strip(),
+            }, 400)
 
         @self.errorhandler(404)
         def page_not_found(e):
