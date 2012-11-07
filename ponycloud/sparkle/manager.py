@@ -162,7 +162,6 @@ class Manager(object):
         the specified tenant and so on.
         """
 
-        # Iterate
         for child in path[1:]:
             if 0 == len(getattr(self.model, child).list(**keys)):
                 raise NotFound('%s/%s not found' % (child, keys[child]))
@@ -176,11 +175,12 @@ class Manager(object):
 
         changes = []
 
-        # Retrieve all changes.
+        # Retrieve all changes done by the current transaction.
         for row in self.db.changelog.order_by(self.db.changelog.id).all():
             changes.append((row.id, row.entity, row.old_data, row.new_data))
 
-        # Flush them.
+        # Changelog needs to be emptied afterwards.
+        # There is a trigger that won't otherwise allow commit.
         self.db.changelog.delete()
 
         return changes
@@ -192,19 +192,15 @@ class Manager(object):
         Called from API to obtain list of collection items.
         """
 
-        # The collection we are interested in and the path leading to it.
+        # Get the leading path plus name of the collection, validate the
+        # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
-
-        # Validate the path leading to the collection.
         self.validate_path(path, keys)
-
-        # Get contents of the collection.
         desired = getattr(self.model, collection).list(**keys)
 
-        # Limited results, 100 per page.
+        # Limit the results, 100 per page.
         limited = desired[page * 100 : (page + 1) * 100]
 
-        # Return properly formatted collection.
         # TODO: Incorporate current state.
         return {
             'total': len(desired),
@@ -219,19 +215,15 @@ class Manager(object):
         Called from API to obtain entity description.
         """
 
-        # Validate path leading to the entity.
+        # Validate path leading to the entity for access control.
         self.validate_path(path, keys)
 
-        # Entity name.
-        name = path[-1]
-
-        # Get the entity itself.
         try:
+            name = path[-1]
             desired = getattr(self.model, name).get(keys[name])
         except KeyError:
             raise NotFound('%s/%s not found' % (name, keys[name]))
 
-        # Return properly formatted result.
         # TODO: Incorporate current state.
         return {
             'desired': desired,
