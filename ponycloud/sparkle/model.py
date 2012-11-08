@@ -4,6 +4,17 @@
 Sparkle Data Model
 """
 
+def combined_keys(row, key):
+    """
+    Returns combined set of values under same key in both row states.
+    """
+    s = set()
+    for state in row.values():
+        if state is not None and key in state:
+            s.add(state[key])
+    return s
+
+
 class Model(object):
     """
     Encapsulates the whole Sparkle data model.
@@ -150,6 +161,7 @@ class Entity(object):
         """
 
         # If the notification is about a join table, we have less work.
+        # Plus joins like this are only possible on the desired state.
         if table in self.nm_tables:
             local, table, remote = [nm for nm in self.nm_indexes \
                                        if nm[1] == table].pop()
@@ -186,14 +198,14 @@ class Entity(object):
                     del self.data[pkey]
                     self.pkeys.remove(pkey)
 
-        # We might also need to remove all associated secondary indexes
-        # if removing the desired portion of the state.
-        if old.get('desired') is not None:
+        # We might also need to remove all secondary indexes.
+        pkey = self._primary_key(old)
+        if pkey is not None:
             for idx in self.indexes:
-                value = old['desired'][idx]
-                self.index[idx][value].remove(pkey)
-                if 0 == len(self.index[idx][value]):
-                    del self.index[idx][value]
+                for value in combined_keys(old, idx):
+                    self.index[idx][value].remove(pkey)
+                    if 0 == len(self.index[idx][value]):
+                        del self.index[idx][value]
 
         for state in ('desired', 'current'):
             if new.get(state) is not None:
@@ -207,14 +219,25 @@ class Entity(object):
                 else:
                     self.data[pkey].update(new)
 
-        # We might also need to add all associated secondary
-        # indexes if adding the desired portion of the state.
-        if new.get('desired') is not None:
+        # We might also need to add associated secondary indexes.
+        pkey = self._primary_key(new)
+        if pkey is not None:
             for idx in self.indexes:
-                value = new['desired'][idx]
-                self.index[idx].setdefault(value, set())
-                self.index[idx][value].add(pkey)
+                for value in combined_keys(new, idx):
+                    self.index[idx].setdefault(value, set())
+                    self.index[idx][value].add(pkey)
     # /def notify
+
+
+    def _primary_key(self, row):
+        """
+        Returns primary key for given row, if it contains at least one state.
+        """
+        for state in row.values():
+            if state is not None and self.pkey[0] in state:
+                return state[self.pkey[0]]
+        return None
+
 
     def get(self, key):
         """
