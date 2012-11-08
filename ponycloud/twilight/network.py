@@ -165,18 +165,23 @@ def configure(recipe):
                 network[item[1]].lacp_rate = item[3]
                 network[item[1]].xmit_hash_policy = item[4]
         elif item[0] == 'enslave':
+            #We need to set the interface down so we can add it
+            #as a slave. Then it's automatically turned on again.
+            network[item[2]].state = 'down'
             network[item[1]].slave_add(item[2])
         elif item[0] == 'bridge':
-            Bridge.create(item[1])
+            #Bridges need to be set up manually.
+            Bridge.create(item[1]).state = 'up'
         elif item[0] == 'port':
             network[item[1]].port_add(item[2])
         elif item[0] == 'vlan':
-            VLAN.create(item[2], item[3])
+            #VLANs need to be set up manually.
+            VLAN.create(item[2], item[3]).state = 'up'
         elif item[0] == 'addr':
             network[item[1]].addr_add(item[2])
     return
 
-#TODO We need to be tolerant to faults so we can do as much as possible
+#TODO We need to be tolerant to faults so we can do as much as possible.
 def unconfigure(recipe):
     """
     Undo all changes done by calling configure with given recipe
