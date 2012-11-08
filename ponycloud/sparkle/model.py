@@ -9,13 +9,10 @@ class Model(object):
     Encapsulates the whole Sparkle data model.
     """
 
-    def __init__(self, db):
+    def __init__(self):
         """
         Initializes the model.
         """
-
-        # Save attributes.
-        self.db = db
 
         # Map of tables to entities that need to receive notifications.
         self.table_map = {}
@@ -48,26 +45,16 @@ class Model(object):
     # /def __init__
 
 
-    def load(self):
-        """
-        Perform initial load from the database on all entities.
-        """
-
-        self.clear()
-
-        for table, entities in self.table_map.items():
-            for row in getattr(self.db, table).all():
-                row = {c.name: getattr(row, c.name) for c in row.c}
-                for ent in entities:
-                    ent.notify(table, None, row)
-    # /def load
-
-
     def apply_changes(self, changes):
         """
         Applies set of changes.
 
         Changes format is `[(id, table, old_value, new_value), ...]`.
+
+        The old_value and new_value is dict with keys 'desired' and 'current'.
+        If only one part is supplied, the other one is not affected by the
+        change.  This allows for desired state updates that do not affect
+        current state and vice versa.
         """
 
         # Iterate over changes.
@@ -75,7 +62,7 @@ class Model(object):
             # Notify correct tables about the change.
             for ent in self.table_map.get(table, []):
                 ent.notify(table, old, new)
-    # /def apply_changes
+
 
     def clear(self):
         """
@@ -167,16 +154,16 @@ class Entity(object):
             local, table, remote = [nm for nm in self.nm_indexes \
                                        if nm[1] == table].pop()
 
-            if old is not None:
+            if old.get('desired') is not None:
                 # We need to remove the old link.
-                self.index[remote][old[remote]].remove(old[local])
-                if 0 == len(self.index[remote][old[remote]]):
-                    del self.index[remote][old[remote]]
+                self.index[remote][old['desired'][remote]].remove(old['desired'][local])
+                if 0 == len(self.index[remote][old['desired'][remote]]):
+                    del self.index[remote][old['desired'][remote]]
 
-            if new is not None:
+            if new.get('desired') is not None:
                 # We need to install new link.
-                self.index[remote].setdefault(new[remote], set())
-                self.index[remote][new[remote]].add(new[local])
+                self.index[remote].setdefault(new['desired'][remote], set())
+                self.index[remote][new['desired'][remote]].add(new['desired'][local])
 
             # That's it for N:M tables, primary table handling below.
             return
@@ -185,32 +172,46 @@ class Entity(object):
         # Make sure we have been notified correctly.
         assert table == self.name
 
-        if old is not None:
-            # Get the primary key.
-            pkey = old[self.pkey[0]]
+        for state in ('desired', 'current'):
+            if old.get(state) is not None:
+                # Get the primary key.
+                pkey = old[state][self.pkey[0]]
 
-            # We need to remove the old row first.
-            del self.data[pkey]
-            self.pkeys.remove(pkey)
+                # We need to remove this state from the row.
+                del self.data[pkey][state]
 
-            # We also need to remove all associated secondary indexes.
+                # It that was all that was left from this row,
+                # remove the row completely.
+                if 0 == len(self.data[pkey]):
+                    del self.data[pkey]
+                    self.pkeys.remove(pkey)
+
+        # We might also need to remove all associated secondary indexes
+        # if removing the desired portion of the state.
+        if old.get('desired') is not None:
             for idx in self.indexes:
-                value = old[idx]
+                value = old['desired'][idx]
                 self.index[idx][value].remove(pkey)
                 if 0 == len(self.index[idx][value]):
                     del self.index[idx][value]
 
-        if new is not None:
-            # Get the primary key.
-            pkey = new[self.pkey[0]]
+        for state in ('desired', 'current'):
+            if new.get(state) is not None:
+                # Get the primary key.
+                pkey = new[state][self.pkey[0]]
 
-            # We need to install the new row now.
-            self.data[pkey] = new
-            self.pkeys.add(pkey)
+                # We need to install the portion of the row.
+                if pkey not in self.data:
+                    self.data[pkey] = new
+                    self.pkeys.add(pkey)
+                else:
+                    self.data[pkey].update(new)
 
-            # And we also need to update all secondary indexes.
+        # We might also need to add all associated secondary
+        # indexes if adding the desired portion of the state.
+        if new.get('desired') is not None:
             for idx in self.indexes:
-                value = new[idx]
+                value = new['desired'][idx]
                 self.index[idx].setdefault(value, set())
                 self.index[idx][value].add(pkey)
     # /def notify
@@ -220,7 +221,6 @@ class Entity(object):
         Retrieves item using the primary key.
         """
         return self.data[key]
-    # /def get
 
 
     def list(self, **keys):
@@ -239,7 +239,6 @@ class Entity(object):
                 pkeys = pkeys.intersection(self.index[k].get(v, set()))
 
         return [self.data[pk] for pk in pkeys]
-    # /def list
 
 # /class Entity
 

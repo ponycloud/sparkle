@@ -68,7 +68,6 @@ def check_and_fix_parent(path, keys, value):
         if value.setdefault(path[-2], keys[path[-2]]) != keys[path[-2]]:
             raise BadRequest('invalid %s, expected %s' \
                                 % (path[-2], keys[path[-2]]))
-# /def fix_value
 
 
 class Manager(object):
@@ -86,7 +85,6 @@ class Manager(object):
 
         # Dictionary with host informations.
         self.hosts = {}
-    # /def __init__
 
 
     def start(self):
@@ -98,7 +96,6 @@ class Manager(object):
 
         # We need to load data from database on startup.
         self.schedule_load()
-    # /def start
 
 
     def schedule_load(self):
@@ -111,14 +108,25 @@ class Manager(object):
 
         print 'scheduling data load'
 
-        # Create replacement model.
-        model = Model(self.db)
+        def load():
+            # Create the replacement model.
+            model = Model()
+
+            # Fetch data for all it's tables.
+            for table, entities in model.table_map.items():
+                for row in getattr(self.db, table).all():
+                    row = {c.name: getattr(row, c.name) for c in row.c}
+                    for ent in entities:
+                        ent.notify(table, {'desired': None}, {'desired': row})
+
+            # Return finished model to replace the current one.
+            return model
 
         # Attempt the load the data.
-        d = deferToThread(model.load)
+        d = deferToThread(load)
 
-        # Relate failure handler traps just the OperationalError from
-        # psycopg2, other exceptions need to be propagated so that we
+        # Load failure handler traps just the OperationalError from
+        # database, other exceptions need to be propagated so that we
         # don't break debugging.
         def failure(fail):
             fail.trap(OperationalError)
@@ -126,7 +134,7 @@ class Manager(object):
             reactor.callLater(15, self.schedule_load)
 
         # In case of success
-        def success(*a):
+        def success(model):
             print 'data successfully loaded'
             self.model = model
 
@@ -150,7 +158,6 @@ class Manager(object):
         # Make sure that the host exists and update route.
         self.hosts.setdefault(msg['uuid'], {})
         self.hosts[msg['uuid']]['route'] = sender
-    # /def twilight_presence
 
 
     def validate_path(self, path, keys):
@@ -165,7 +172,6 @@ class Manager(object):
         for child in path[1:]:
             if 0 == len(getattr(self.model, child).list(**keys)):
                 raise NotFound('%s/%s not found' % (child, keys[child]))
-    # /def validate_path
 
 
     def _get_changes(self):
@@ -176,15 +182,18 @@ class Manager(object):
         changes = []
 
         # Retrieve all changes done by the current transaction.
+        # Mentioning only desired state (which is what this is about)
+        # will cause Model to update only that part of entities.
         for row in self.db.changelog.order_by(self.db.changelog.id).all():
-            changes.append((row.id, row.entity, row.old_data, row.new_data))
+            old_data = {'desired': row.old_data}
+            new_data = {'desired': row.new_data}
+            changes.append((row.id, row.entity, old_data, new_data))
 
         # Changelog needs to be emptied afterwards.
         # There is a trigger that won't otherwise allow commit.
         self.db.changelog.delete()
 
         return changes
-    # /def get_changes
 
 
     def list_collection(self, path, keys, page=0):
@@ -196,18 +205,11 @@ class Manager(object):
         # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
         self.validate_path(path, keys)
-        desired = getattr(self.model, collection).list(**keys)
+        state = getattr(self.model, collection).list(**keys)
 
-        # Limit the results, 100 per page.
-        limited = desired[page * 100 : (page + 1) * 100]
-
-        # TODO: Incorporate current state.
-        return {
-            'total': len(desired),
-            'items': [{'desired': d} for d in limited],
-        }
-
-    # /def list_collection
+        # Return limited results, 100 per page.
+        limited = state[page * 100 : (page + 1) * 100]
+        return {'total': len(state), 'items': limited}
 
 
     def get_entity(self, path, keys):
@@ -220,15 +222,9 @@ class Manager(object):
 
         try:
             name = path[-1]
-            desired = getattr(self.model, name).get(keys[name])
+            return getattr(self.model, name).get(keys[name])
         except KeyError:
             raise NotFound('%s/%s not found' % (name, keys[name]))
-
-        # TODO: Incorporate current state.
-        return {
-            'desired': desired,
-        }
-    # /def get_entity
 
 
     @database_operation
@@ -272,7 +268,7 @@ class Manager(object):
         self.model.apply_changes(changes)
 
         # Return new desired state of the entity.
-        return getattr(self.model, name).get(keys[path[-1]])
+        return getattr(self.model, name).get(keys[path[-1]])['desired']
     # /def update_entity
 
 
@@ -314,7 +310,7 @@ class Manager(object):
         # Return desired state of the new entity.
         for cid, table, old, new in changes:
             if table == name:
-                return new
+                return new['desired']
 
         # Or just a poor None if we've failed (which is not very probable).
         return None
