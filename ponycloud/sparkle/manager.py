@@ -12,7 +12,7 @@ from werkzeug.exceptions import NotFound, Forbidden, BadRequest, \
                                 InternalServerError
 
 from ponycloud.common.util import uuidgen
-from ponycloud.sparkle.model import Model
+from ponycloud.common.model import Model
 
 from functools import wraps
 
