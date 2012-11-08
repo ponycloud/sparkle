@@ -8,8 +8,8 @@ network = Networking()
 
 def create_recipe(configuration):
     """
-    Creates a receipt to configure or unconfigure the network.
-    The receipt is something like::
+    Creates a recipe to configure or unconfigure the network.
+    The recipe is something like::
         [('bond', 'pc-bond0'),
          ('enslave', 'pc-bond0', 'eth0'),
          ('enslave', 'pc-bond0', 'eth1'),
