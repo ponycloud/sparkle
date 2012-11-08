@@ -1126,7 +1126,7 @@ LACPDU tx rate to request from 802.3ad partner.#</dia:string>
             <dia:string>#enum#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#{2, 2+3, 3+4}
+            <dia:string>#{layer2, layer2+3, layer3+4}
 Address layers to be used for transmit hashing.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
