@@ -255,8 +255,10 @@ class Manager(object):
         obj = entity.filter_by(**{node.pkey[0]: keys[name]}).one()
 
         # Apply the update to individual columns.
+        # Ignore uuid updates, there is no way we are going to allow
+        # user to change them.  It could compromise security.
         for c in obj.c:
-            if c.name in value:
+            if c.name in value and c.name != 'uuid':
                 setattr(obj, c.name, value[c.name])
 
         # Get data from the changelog.
@@ -291,6 +293,10 @@ class Manager(object):
         name = path[-1]
         node = getattr(self.model, name)
         entity = getattr(self.db, name)
+
+        # Make sure we do not set uuid, database will generate one for us.
+        if 'uuid' in value:
+            del value['uuid']
 
         # Attempt creation of new entity.
         entity.insert(**value)

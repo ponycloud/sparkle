@@ -15,6 +15,7 @@ setup(
               'ponycloud.luna',
               'ponycloud.sparkle',
               'ponycloud.rainbow',
+              'ponycloud.celly',
               'ponycloud.common'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',

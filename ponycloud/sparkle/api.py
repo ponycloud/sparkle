@@ -22,23 +22,23 @@ import re
 
 
 AUTOMAGIC_ENDPOINTS = [
-    '/platform/disk/<varchar:disk>',
-    '/platform/volume/<uuid:volume>',
-    '/platform/cpu-profile/<uuid:cpu_profile>',
-    '/platform/storage-pool/<uuid:storage_pool>',
-    '/platform/storage-pool/<uuid:storage_pool>/disk/<varchar:disk>',
-    '/platform/host/<uuid:host>',
-    '/platform/host/<uuid:host>/nic/<varchar:nic>',
-    '/platform/host/<uuid:host>/raid/<uuid:raid>',
-    '/platform/host/<uuid:host>/raid/<uuid:raid>/logical-volume/<uuid:logical_volume>',
-    '/platform/host/<uuid:host>/raid/<uuid:raid>/disk/<varchar:disk>',
-    '/platform/host/<uuid:host>/bond/<uuid:bond>',
-    '/platform/host/<uuid:host>/bond/<uuid:bond>/nic/<varchar:nic>',
-    '/platform/host/<uuid:host>/bond/<uuid:bond>/role/<uuid:nic_role>',
-    '/public/image/<uuid:image>',
-    '/public/switch/<uuid:switch>',
-    '/public/switch/<uuid:switch>/network/<uuid:network>',
-    '/public/switch/<uuid:switch>/network/<uuid:network>/route/<uuid:route>',
+    '/disk/<varchar:disk>',
+    '/volume/<uuid:volume>',
+    '/cpu-profile/<uuid:cpu_profile>',
+    '/storage-pool/<uuid:storage_pool>',
+    '/storage-pool/<uuid:storage_pool>/disk/<varchar:disk>',
+    '/host/<uuid:host>',
+    '/host/<uuid:host>/nic/<varchar:nic>',
+    '/host/<uuid:host>/raid/<uuid:raid>',
+    '/host/<uuid:host>/raid/<uuid:raid>/logical-volume/<uuid:logical_volume>',
+    '/host/<uuid:host>/raid/<uuid:raid>/disk/<varchar:disk>',
+    '/host/<uuid:host>/bond/<uuid:bond>',
+    '/host/<uuid:host>/bond/<uuid:bond>/nic/<varchar:nic>',
+    '/host/<uuid:host>/bond/<uuid:bond>/role/<uuid:nic_role>',
+    '/image/<uuid:image>',
+    '/switch/<uuid:switch>',
+    '/switch/<uuid:switch>/network/<uuid:network>',
+    '/switch/<uuid:switch>/network/<uuid:network>/route/<uuid:route>',
     '/tenant/<uuid:tenant>',
     '/tenant/<uuid:tenant>/instance/<uuid:instance>',
     '/tenant/<uuid:tenant>/instance/<uuid:instance>/vdisk/<uuid:vdisk>',
@@ -137,6 +137,11 @@ def make_sparkle_app(manager):
             'application': 'Sparkle',
             'capabilities': [],
         }
+
+    # Simple reflection of the data endpoints.
+    @app.route_json('/_endpoints')
+    def endpoints():
+        return AUTOMAGIC_ENDPOINTS
 
     # Ta-dah?
     return app
