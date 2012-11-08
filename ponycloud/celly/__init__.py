@@ -11,7 +11,7 @@ import re
 
 def guess_key(item):
     for part in ('desired', 'current'):
-        for key in ('uuid', 'hwaddr', 'email'):
+        for key in ('uuid', 'id', 'key', 'hash', 'hwaddr', 'email'):
             if part in item and key in item[part]:
                 return item[part][key]
 
