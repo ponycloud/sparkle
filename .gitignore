@@ -4,6 +4,10 @@
 /dist/
 /*.egg*/
 *~
-*.html
-*.png
+/doc/*.html
+/doc/*.png
+/doc/*/*.html
+/doc/*/*.png
+/doc/*/*/*.html
+/doc/*/*/*.png
 /doc/database.md
