@@ -112,8 +112,12 @@ class Manager(object):
             # Create the replacement model.
             model = Model()
 
-            # Fetch data for all it's tables.
             for table, entities in model.table_map.items():
+                # Ignore virtual tables, they do not exist in database.
+                if table in model.virtual:
+                    continue
+
+                # Load the data for the `real' ones.
                 for row in getattr(self.db, table).all():
                     row = {c.name: getattr(row, c.name) for c in row.c}
                     for ent in entities:
@@ -247,6 +251,10 @@ class Manager(object):
         node = getattr(self.model, name)
         entity = getattr(self.db, name)
 
+        # This just does not make sense for virtual entities.
+        if name in self.model.virtual:
+            raise BadRequest('cannot update virtual entity')
+
         # Get the current object.
         obj = entity.filter_by(**{node.pkey[0]: keys[name]}).one()
 
@@ -280,7 +288,7 @@ class Manager(object):
         # TODO: Add recursion support using DB relates.
 
         # Validate entity path.
-        self.validate_path(path, keys)
+        self.validate_path(path[:-1], keys)
 
         # Make sure the value is valid and references correct parent.
         check_and_fix_parent(path, keys, value)
@@ -289,6 +297,10 @@ class Manager(object):
         name = path[-1]
         node = getattr(self.model, name)
         entity = getattr(self.db, name)
+
+        # Do not allow to create virtual entities.
+        if name in self.model.virtual:
+            raise BadRequest('cannot create virtual entity')
 
         # Make sure we do not set uuid, database will generate one for us.
         if 'uuid' in value:
@@ -330,6 +342,10 @@ class Manager(object):
         name = path[-1]
         node = getattr(self.model, name)
         entity = getattr(self.db, name)
+
+        # This just does not make sense for virtual entities.
+        if name in self.model.virtual:
+            raise BadRequest('cannot delete virtual entity')
 
         # Attempt deletion of the entity.
         entity.filter_by(**{node.pkey[0]: keys[name]})\

@@ -28,15 +28,15 @@ class Model(object):
         # Map of tables to entities that need to receive notifications.
         self.table_map = {}
 
-        # Initialize the entities.
+        # Database entities.
         self.address          = Entity(self, 'address', indexes=['network', 'vnic'])
         self.bond             = Entity(self, 'bond', indexes=['host'])
         self.cluster          = Entity(self, 'cluster', indexes=['tenant'])
         self.cluster_instance = Entity(self, 'cluster_instance', indexes=['cluster', 'instance'])
         self.cpu_profile      = Entity(self, 'cpu_profile')
-        self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'))
+        self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'), nm_indexes=[('disk', 'host_disk', 'host')])
         self.extent           = Entity(self, 'extent', indexes=['volume', 'storage_pool'])
-        self.host             = Entity(self, 'host')
+        self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk')])
         self.image            = Entity(self, 'image', indexes=['tenant'])
         self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'])
         self.logical_volume   = Entity(self, 'logical_volume', indexes=['storage_pool', 'raid'])
@@ -54,6 +54,12 @@ class Model(object):
         self.vdisk            = Entity(self, 'vdisk', indexes=['instance', 'volume'])
         self.vnic             = Entity(self, 'vnic', indexes=['instance', 'switch'])
         self.volume           = Entity(self, 'volume', indexes=['tenant', 'storage_pool'])
+
+        # Set of virtual tables that do not exist in database.
+        self.virtual = set(['host_disk'])
+
+        # Virtual entities.
+        self.host_disk = Entity(self, 'host_disk', indexes=['host', 'disk'])
     # /def __init__
 
 
