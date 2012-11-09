@@ -46,6 +46,7 @@ AUTOMAGIC_ENDPOINTS = [
     '/tenant/<uuid:tenant>/instance/<uuid:instance>/cluster/<uuid:cluster_instance>',
     '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>',
     '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>/address/<uuid:address>',
+    '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>/switch/<uuid:switch>',
     '/tenant/<uuid:tenant>/image/<uuid:image>',
     '/tenant/<uuid:tenant>/quota/<uuid:quota>',
     '/tenant/<uuid:tenant>/volume/<uuid:volume>',
