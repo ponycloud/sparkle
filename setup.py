@@ -14,7 +14,6 @@ setup(
               'ponycloud.twilight',
               'ponycloud.luna',
               'ponycloud.sparkle',
-              'ponycloud.rainbow',
               'ponycloud.celly',
               'ponycloud.common'],
     classifiers=[
