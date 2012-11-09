@@ -3,9 +3,19 @@
 __all__ = ['Manager']
 
 from twisted.internet import reactor, task
+
 from ponycloud.common.util import uuidgen
 
 from ponyvirt import Hypervisor
+
+import network
+import pyudev
+
+
+def from_thread(fn):
+    """Returns function that forwards call from other thread."""
+    return lambda *a, **kw: reactor.callFromThread(fn, *a, **kw)
+
 
 class Manager(object):
     """
@@ -23,6 +33,14 @@ class Manager(object):
         self.uuid = self.virt.sysinfo['system']['uuid'].lower()
         self.incarnation = uuidgen()
 
+        print 'connecting to udev'
+        self.udev = pyudev.Context()
+        self.monitor = pyudev.Monitor.from_netlink(self.udev)
+        self.observer = pyudev.MonitorObserver(self.monitor, \
+                                               from_thread(self.on_udev_event))
+        self.observer.start()
+
+
     def start(self):
         """
         Perform the startup routine.
@@ -36,11 +54,11 @@ class Manager(object):
         self.send_host_info()
         task.LoopingCall(self.presence).start(15.0)
 
+
     def send_host_info(self):
         """
         Sends system info and hypervisor capabilities to Sparkle.
         """
-
         print 'sending host info'
         self.sparkle.send({
             'event': 'host-info',
@@ -49,6 +67,7 @@ class Manager(object):
             'sysinfo': self.virt.sysinfo,
             'capabilities': self.virt.capabilities,
         })
+
 
     def presence(self):
         """
@@ -62,6 +81,14 @@ class Manager(object):
             'uuid': self.uuid,
             'incarnation': self.incarnation,
         })
+
+
+    def on_udev_event(self, action, device):
+        """Handler of background udev notifications."""
+        if device.subsystem not in ('net', 'block'):
+            return
+
+        print 'udev event:', action, device.subsystem, device.sys_name
 
 
 # vim:set sw=4 ts=4 et:
