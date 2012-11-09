@@ -55,6 +55,7 @@ class EntityProxy(object):
     def __init__(self, celly, uri, children={}):
         self.celly = celly
         self.uri = uri
+        self.children = children
 
         for name, child in children.items():
             child_uri = '%s/%s/' % (self.uri, name.replace('_', '-'))
