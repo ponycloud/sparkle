@@ -88,6 +88,10 @@ def make_collection_handler(manager, path):
     """
 
     def handler(**keys):
+        # Set tenant to None by in order to properly display
+        # entities below the tenant level.
+        keys.setdefault('tenant', None)
+
         if 'GET' == request.method:
             return blockingCallFromThread(reactor, manager.list_collection, path, keys)
         elif 'POST' == request.method:
@@ -103,6 +107,10 @@ def make_entity_handler(manager, path):
     """
 
     def handler(**keys):
+        # Set tenant to None by in order to properly display
+        # entities below the tenant level.
+        keys.setdefault('tenant', None)
+
         if 'GET' == request.method:
             return blockingCallFromThread(reactor, manager.get_entity, path, keys)
         elif 'PUT' == request.method:
