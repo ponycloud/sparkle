@@ -11,11 +11,14 @@ __all__ = ['make_sparkle_app']
 from twisted.internet.threads import blockingCallFromThread
 from twisted.internet import reactor
 
-from contextlib import contextmanager
-from os.path import dirname
-
+from werkzeug.exceptions import BadRequest, InternalServerError, NotFound
 from ponycloud.common.rest import Flaskful
 from flask import request
+
+from ponycloud.sparkle.manager import ManagerError, UserError, PathError
+
+from os.path import dirname
+from functools import wraps
 
 import cjson
 import re
@@ -62,6 +65,7 @@ AUTOMAGIC_ENDPOINTS = [
     '/user/<varchar:user>/member/<uuid:member>',
 ]
 
+
 def get_endpoints():
     """
     Returns processed endpoints from above.
@@ -80,47 +84,71 @@ def get_endpoints():
         endpoints.append((rule, out))
 
     return endpoints
-# /def get_endpoints
+
+
+def convert_exceptions(fn):
+    """Decorator that changes manager errors to HTTP exceptions."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except PathError, e:
+            raise NotFound(e.message)
+        except UserError, e:
+            raise BadRequest(e.message)
+        except ManagerError, e:
+            raise InternalServerError(e.message)
+
+    return wrapper
+
+
+def call(fn, *args, **kwargs):
+    return blockingCallFromThread(reactor, fn, *args, **kwargs)
+
 
 def make_collection_handler(manager, path):
     """
     Creates collection endpoint handler for given path.
     """
 
+    @convert_exceptions
     def handler(**keys):
         # Set tenant to None by in order to properly display
         # entities below the tenant level.
         keys.setdefault('tenant', None)
 
         if 'GET' == request.method:
-            return blockingCallFromThread(reactor, manager.list_collection, path, keys)
+            return call(manager.list_collection, path, keys)
         elif 'POST' == request.method:
-            return blockingCallFromThread(reactor, manager.create_entity, path, keys, cjson.decode(request.data))
+            data = cjson.decode(request.data)
+            return call(manager.create_entity, path, keys, data)
 
     handler.__name__ = 'c_' + '_'.join(path)
     return handler
-# /def make_collection_handler
+
 
 def make_entity_handler(manager, path):
     """
     Creates entity endpoint handler for given path.
     """
 
+    @convert_exceptions
     def handler(**keys):
         # Set tenant to None by in order to properly display
         # entities below the tenant level.
         keys.setdefault('tenant', None)
 
         if 'GET' == request.method:
-            return blockingCallFromThread(reactor, manager.get_entity, path, keys)
+            return call(manager.get_entity, path, keys)
         elif 'PUT' == request.method:
-            return blockingCallFromThread(reactor, manager.update_entity, path, keys, cjson.decode(request.data))
+            data = cjson.decode(request.data)
+            return call(manager.update_entity, path, keys, data)
         elif 'DELETE' == request.method:
-            return blockingCallFromThread(reactor, manager.delete_entity, path, keys)
+            return call(manager.delete_entity, path, keys)
 
     handler.__name__ = 'e_' + '_'.join(path)
     return handler
-# /def make_entity_handler
+
 
 def make_sparkle_app(manager):
     """

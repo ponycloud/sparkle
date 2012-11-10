@@ -8,9 +8,6 @@ from twisted.internet.defer import Deferred
 
 from sqlalchemy.exc import OperationalError, DatabaseError
 
-from werkzeug.exceptions import NotFound, Forbidden, BadRequest, \
-                                InternalServerError
-
 from ponycloud.common.util import uuidgen
 from ponycloud.common.model import Model
 
@@ -20,9 +17,22 @@ import traceback
 import re
 
 
+class ManagerError(Exception):
+    """Generic manager error."""
+
+class UserError(ManagerError):
+    """Manager failure caused by invalid input from user."""
+
+class PathError(UserError):
+    """User requested a non-existing entity or collection."""
+
+
 def database_operation(fn):
     """
     Decorator for DB-related methods of the Manager class.
+
+    Used help with transactions and to convert database exceptions to
+    manager errors that are better suited for display to the end users.
     """
 
     @wraps(fn)
@@ -37,13 +47,25 @@ def database_operation(fn):
 
             # If the database is down, notify user gracefully.
             if isinstance(e, OperationalError):
-                raise InternalServerError('database is down')
+                raise ManagerError('database is down')
 
-            # If it's something else, just forward it to the user.
+            # If it's something else, blame the user.
             if isinstance(e, DatabaseError):
-                if 'DETAIL:' in e.orig.pgerror:
-                    raise BadRequest(re.sub('(.|\n)*DETAIL: *', '', e.orig.pgerror))
-                raise BadRequest(re.sub('^[A-Z]+: *', '', e.orig.pgerror))
+                message = e.orig.pgerror
+
+                if 'DETAIL:' in message:
+                    # If we have a detail, keep just that.
+                    message = re.sub('.*DETAIL: *', '', message, re.S)
+
+                # Strip the "ERROR:" or something at the start.
+                message = re.sub('^[A-Z]+: *', '', message)
+
+                # If we have multiple lines, keep just the first.
+                # Rest is going to describe SQL statement, which user
+                # don't need to know anything about.
+                message = re.sub('\n.*', '', message, re.S)
+
+                raise UserError(message)
 
             # Otherwise just re-raise the exception and hope for the best.
             raise
@@ -54,17 +76,24 @@ def database_operation(fn):
 
 def backtrace(fn):
     """
-    If the wrapped function exits with an exception,
-    print full back trace and re-raise it.
+    Backtracing wrapper
+
+    Since Twisted will eat some of our backtraces, we need to dump them
+    ourselves.  This decorator will print backtrace for any non-manager
+    error that is raised by the wrapped function.
+
+    The original exception is always re-raised.
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
+        except ManagerError:
+            raise
         except:
-            print '------[ begin manager exception ]----------------------'
+            print '------[ manager exception ]----------------------------'
             traceback.print_exc()
-            print '------[  end manager exception  ]----------------------'
+            print '-------------------------------------------------------'
             raise
 
     return wrapper
@@ -81,12 +110,12 @@ def check_and_fix_parent(path, keys, value):
 
     # Verify that we've received an object and not something else.
     if not isinstance(value, dict):
-        raise BadRequest('object expected')
+        raise UserError('object expected')
 
     # Enforce the correct parent.
     if len(path) > 1:
         if value.setdefault(path[-2], keys[path[-2]]) != keys[path[-2]]:
-            raise BadRequest('invalid %s, expected %s' \
+            raise UserError('invalid %s, expected %s' \
                                 % (path[-2], keys[path[-2]]))
 
 
@@ -185,18 +214,18 @@ class Manager(object):
         self.hosts[msg['uuid']]['route'] = sender
 
 
-    def validate_path(self, path, keys):
+    def _validate_path(self, path, keys):
         """
         Validates entity path.
 
-        Raises NotFound if specified path does not exist.
+        Raises PathError if specified path does not exist.
         That is, this validates that specified instance is actually under
         the specified tenant and so on.
         """
 
         for child in path[1:]:
             if 0 == len(getattr(self.model, child).list(**keys)):
-                raise NotFound('%s/%s not found' % (child, keys[child]))
+                raise PathError('%s/%s not found' % (child, keys[child]))
 
 
     def _get_changes(self):
@@ -230,7 +259,7 @@ class Manager(object):
         # Get the leading path plus name of the collection, validate the
         # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
-        self.validate_path(path, keys)
+        self._validate_path(path, keys)
         state = getattr(self.model, collection).list(**keys)
 
         # Return limited results, 100 per page.
@@ -245,13 +274,13 @@ class Manager(object):
         """
 
         # Validate path leading to the entity for access control.
-        self.validate_path(path, keys)
+        self._validate_path(path, keys)
 
         try:
             name = path[-1]
             return getattr(self.model, name).get(keys[name])
         except KeyError:
-            raise NotFound('%s/%s not found' % (name, keys[name]))
+            raise PathError('%s/%s not found' % (name, keys[name]))
 
 
     @backtrace
@@ -265,7 +294,7 @@ class Manager(object):
         # This is essential in order to enforce access control, because
         # the updated entity will not be allowed to reference any other
         # parent.
-        self.validate_path(path, keys)
+        self._validate_path(path, keys)
 
         # Make sure the value is valid and references correct parent.
         check_and_fix_parent(path, keys, value)
@@ -277,7 +306,7 @@ class Manager(object):
 
         # This just does not make sense for virtual entities.
         if name in self.model.virtual:
-            raise BadRequest('cannot update virtual entity')
+            raise UserError('cannot update virtual entity')
 
         # Get the current object.
         obj = entity.filter_by(**{node.pkey[0]: keys[name]}).one()
@@ -313,7 +342,7 @@ class Manager(object):
         # TODO: Add recursion support using DB relates.
 
         # Validate entity path.
-        self.validate_path(path[:-1], keys)
+        self._validate_path(path[:-1], keys)
 
         # Make sure the value is valid and references correct parent.
         check_and_fix_parent(path, keys, value)
@@ -325,7 +354,7 @@ class Manager(object):
 
         # Do not allow to create virtual entities.
         if name in self.model.virtual:
-            raise BadRequest('cannot create virtual entity')
+            raise UserError('cannot create virtual entity')
 
         # Make sure we do not set uuid, database will generate one for us.
         if 'uuid' in value:
@@ -362,7 +391,7 @@ class Manager(object):
         """
 
         # Validate entity path.
-        self.validate_path(path, keys)
+        self._validate_path(path, keys)
 
         # Get info about the entity.
         name = path[-1]
@@ -371,7 +400,7 @@ class Manager(object):
 
         # This just does not make sense for virtual entities.
         if name in self.model.virtual:
-            raise BadRequest('cannot delete virtual entity')
+            raise UserError('cannot delete virtual entity')
 
         # Attempt deletion of the entity.
         entity.filter_by(**{node.pkey[0]: keys[name]})\
