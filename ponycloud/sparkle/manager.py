@@ -16,6 +16,7 @@ from ponycloud.common.model import Model
 
 from functools import wraps
 
+import traceback
 import re
 
 
@@ -49,6 +50,25 @@ def database_operation(fn):
 
     return wrapper
 # /def database_operation
+
+
+def backtrace(fn):
+    """
+    If the wrapped function exits with an exception,
+    print full back trace and re-raise it.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except:
+            print '------[ begin manager exception ]----------------------'
+            traceback.print_exc()
+            print '------[  end manager exception  ]----------------------'
+            raise
+
+    return wrapper
+# /def backtrace
 
 
 def check_and_fix_parent(path, keys, value):
@@ -201,6 +221,7 @@ class Manager(object):
         return changes
 
 
+    @backtrace
     def list_collection(self, path, keys, page=0):
         """
         Called from API to obtain list of collection items.
@@ -217,6 +238,7 @@ class Manager(object):
         return {'total': len(state), 'items': limited}
 
 
+    @backtrace
     def get_entity(self, path, keys):
         """
         Called from API to obtain entity description.
@@ -232,6 +254,7 @@ class Manager(object):
             raise NotFound('%s/%s not found' % (name, keys[name]))
 
 
+    @backtrace
     @database_operation
     def update_entity(self, path, keys, value):
         """
@@ -281,6 +304,7 @@ class Manager(object):
     # /def update_entity
 
 
+    @backtrace
     @database_operation
     def create_entity(self, path, keys, value):
         """
@@ -330,6 +354,7 @@ class Manager(object):
     # /def create_entity
 
 
+    @backtrace
     @database_operation
     def delete_entity(self, path, keys):
         """
