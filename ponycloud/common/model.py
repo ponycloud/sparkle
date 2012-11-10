@@ -15,6 +15,16 @@ def combined_keys(row, key):
     return s
 
 
+def get_pkey(row, pkey):
+    """Returns (possibly composite) primary key value."""
+    if isinstance(pkey, tuple):
+        for k in pkey:
+            if k not in row:
+                return None
+        return tuple([row[k] for k in pkey])
+    return row.get(pkey, None)
+
+
 class Model(object):
     """
     Encapsulates the whole Sparkle data model.
@@ -36,9 +46,9 @@ class Model(object):
         self.cpu_profile      = Entity(self, 'cpu_profile')
         self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'), nm_indexes=[('disk', 'host_disk', 'host')])
         self.extent           = Entity(self, 'extent', indexes=['volume', 'storage_pool'])
-        self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk')])
+        self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk'), ('host', 'host_instance', 'instance')])
         self.image            = Entity(self, 'image', indexes=['tenant'])
-        self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'])
+        self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'], nm_indexes=[('instance', 'host_instance', 'host')])
         self.logical_volume   = Entity(self, 'logical_volume', indexes=['storage_pool', 'raid'])
         self.member           = Entity(self, 'member', indexes=['tenant', 'user'])
         self.network          = Entity(self, 'network', indexes=['switch'])
@@ -48,18 +58,21 @@ class Model(object):
         self.raid             = Entity(self, 'raid', indexes=['host'])
         self.route            = Entity(self, 'route', indexes=['network'])
         self.storage_pool     = Entity(self, 'storage_pool')
-        self.switch           = Entity(self, 'switch', nm_indexes=[('switch', 'tenant_switch', 'tenant')], protected=['tenant'])
+        self.switch           = Entity(self, 'switch', nm_indexes=[('switch', 'tenant_switch', 'tenant')])
         self.tenant           = Entity(self, 'tenant', nm_indexes=[('tenant', 'tenant_switch', 'switch')])
+        self.tenant_image     = Entity(self, 'tenant_image', pkey=(('tenant', 'image'), ('uuid', 'uuid')), indexes=['tenant', 'image'])
+        self.tenant_switch    = Entity(self, 'tenant_switch', pkey=(('tenant', 'switch'), ('uuid', 'uuid')), indexes=['tenant', 'switch'])
         self.user             = Entity(self, 'user', pkey=('email', 'varchar'))
         self.vdisk            = Entity(self, 'vdisk', indexes=['instance', 'volume'])
         self.vnic             = Entity(self, 'vnic', indexes=['instance', 'switch'])
         self.volume           = Entity(self, 'volume', indexes=['tenant', 'storage_pool'])
 
         # Set of virtual tables that do not exist in database.
-        self.virtual = set(['host_disk'])
+        self.virtual = set(['host_disk', 'host_instance'])
 
         # Virtual entities.
-        self.host_disk = Entity(self, 'host_disk', indexes=['host', 'disk'])
+        self.host_disk = Entity(self, 'host_disk', pkey=(('host', 'disk'), ('uuid', 'uuid')), indexes=['host', 'disk'])
+        self.host_instance = Entity(self, 'host_instance', pkey=(('host', 'instance'), ('uuid', 'uuid')), indexes=['host', 'instance'])
     # /def __init__
 
 
@@ -67,7 +80,7 @@ class Model(object):
         """
         Applies set of changes.
 
-        Changes format is `[(id, table, old_value, new_value), ...]`.
+        Changes format is `[(table, old_value, new_value), ...]`.
 
         The old_value and new_value is dict with keys 'desired' and 'current'.
         If only one part is supplied, the other one is not affected by the
@@ -76,10 +89,26 @@ class Model(object):
         """
 
         # Iterate over changes.
-        for cid, table, old, new in changes:
+        for table, old, new in changes:
             # Notify correct tables about the change.
             for ent in self.table_map.get(table, []):
                 ent.notify(table, old, new)
+
+
+    def dump(self, states=['current', 'desired']):
+        """Dumps specified state from all rows as a changelog."""
+
+        out = []
+
+        for table in dir(self):
+            entity = getattr(self, table)
+            if not isinstance(entity, Entity):
+                continue
+
+            for row in entity.dump(states):
+                out.append(row)
+
+        return out
 
 
     def clear(self):
@@ -87,8 +116,8 @@ class Model(object):
         Throws away all data.
         """
 
-        for name in dir(self):
-            entity = getattr(self, name)
+        for table in dir(self):
+            entity = getattr(self, table)
             if isinstance(entity, Entity):
                 entity.clear()
     # /def clear
@@ -101,62 +130,62 @@ class Entity(object):
     Encapsulates collection of entities.
     """
 
-    def __init__(self, model, name, pkey=('uuid', 'uuid'), \
-                       indexes=[], nm_indexes=[], protected=[]):
+    def __init__(self, model, table, pkey=('uuid', 'uuid'), \
+                       indexes=[], nm_indexes=[]):
         """
         Initializes the collection.
 
         Parameters:
             model      -- Sparkle database model instance
-            name       -- name of the underlying sqlsoup entity
-            pkey       -- tuple with (name, type) of the primary key
+            table      -- name of the underlying sqlsoup table
+            pkey       -- tuple with (name, type) of the primary key,
+                          if the key is composite, tuple of tuples
             indexes    -- list fields to index for lookup
             nm_indexes -- list of (join_left join_table join_right)
                           tuples describing N:M relation to index
-            protected  -- list of fields that need to come separately from
-                          the bulk uploaded by the user, primary key is
-                          protected by default
         """
 
         # Store the arguments.
         self.model = model
-        self.name = name
+        self.table = table
         self.pkey = pkey
         self.indexes = indexes
         self.nm_indexes = nm_indexes
-        self.protected = protected + [pkey[0]]
 
         # Tables that provide N:M indexes.
         self.nm_tables = set([nm[1] for nm in self.nm_indexes])
 
-        # Initialize through settings things to clear state.
+        # Initialize through clearing.
         self.clear()
 
-        # We need to be notified about tables changes.
-        for table in [self.name] + list(self.nm_tables):
+        # We need to be notified about table changes.
+        for table in [self.table] + list(self.nm_tables):
             self.model.table_map.setdefault(table, set())
             self.model.table_map[table].add(self)
     # /def __init__
 
 
     def clear(self):
-        """
-        Throws away all data.
-        """
+        """Throws away all data."""
 
-        # The entities.
+        # Throw away everything.
         self.data = {}
-
-        # Auxiliary indexes.
         self.pkeys = set()
         self.index = {}
 
-        # Initialize the indexes.
+        # Initialize normal indexes.
         for idx in self.indexes:
             self.index[idx] = {}
+
+        # Initialize N:M indexes.
         for local, table, remote in self.nm_indexes:
             self.index[remote] = {}
-    # /def clear
+
+
+    def dump(self, states=['desired', 'current']):
+        """Dumps specified state from all rows as a changelog."""
+        return [(self.table, {}, \
+                 {k: v for k, v in self.data.items() if k in states})]
 
 
     def notify(self, table, old, new):
@@ -189,12 +218,12 @@ class Entity(object):
 
 
         # Make sure we have been notified correctly.
-        assert table == self.name
+        assert table == self.table
 
         for state in ('desired', 'current'):
             if old.get(state) is not None:
                 # Get the primary key.
-                pkey = old[state][self.pkey[0]]
+                pkey = get_pkey(old[state], self.pkey[0])
 
                 # We need to remove this state from the row.
                 del self.data[pkey][state]
@@ -217,7 +246,7 @@ class Entity(object):
         for state in ('desired', 'current'):
             if new.get(state) is not None:
                 # Get the primary key.
-                pkey = new[state][self.pkey[0]]
+                pkey = get_pkey(new[state], self.pkey[0])
 
                 # We need to install the portion of the row.
                 if pkey not in self.data:
@@ -241,8 +270,10 @@ class Entity(object):
         Returns primary key for given row, if it contains at least one state.
         """
         for state in row.values():
-            if state is not None and self.pkey[0] in state:
-                return state[self.pkey[0]]
+            if state is not None:
+                pkey = get_pkey(state, self.pkey[0])
+                if pkey is not None:
+                    return pkey
         return None
 
 

@@ -82,9 +82,7 @@ class Manager(object):
         self.db = db
         self.router = router
         self.incarnation = uuidgen()
-
-        # Dictionary with host informations.
-        self.hosts = {}
+        self.model = Model()
 
 
     def start(self):
@@ -121,7 +119,7 @@ class Manager(object):
                 for row in getattr(self.db, table).all():
                     row = {c.name: getattr(row, c.name) for c in row.c}
                     for ent in entities:
-                        ent.notify(table, {'desired': None}, {'desired': row})
+                        ent.notify(table, {}, {'desired': row})
 
             # Return finished model to replace the current one.
             return model
@@ -138,9 +136,12 @@ class Manager(object):
             reactor.callLater(15, self.schedule_load)
 
         # In case of success
-        def success(model):
+        def success(new_model):
             print 'data successfully loaded'
-            self.model = model
+
+            old_model = self.model
+            self.model = new_model
+            self.model.apply_changes(old_model.dump('current'))
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
@@ -191,7 +192,7 @@ class Manager(object):
         for row in self.db.changelog.order_by(self.db.changelog.id).all():
             old_data = {'desired': row.old_data}
             new_data = {'desired': row.new_data}
-            changes.append((row.id, row.entity, old_data, new_data))
+            changes.append((row.entity, old_data, new_data))
 
         # Changelog needs to be emptied afterwards.
         # There is a trigger that won't otherwise allow commit.
@@ -320,7 +321,7 @@ class Manager(object):
         self.model.apply_changes(changes)
 
         # Return desired state of the new entity.
-        for cid, table, old, new in changes:
+        for table, old, new in changes:
             if table == name:
                 return new['desired']
 
