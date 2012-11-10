@@ -27,23 +27,27 @@ class CollectionProxy(object):
         self.uri = uri
 
     def __iter__(self):
-        out = []
-        for item in self.celly.request(self.uri)['items']:
-            child_uri = '%s%s' % (self.uri, guess_key(item))
-            out.append(EntityProxy(self.celly, child_uri, self.children))
-
-        return iter(out)
+        return iter(self.list)
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            return list(self)[key]
+            return self.page(key // 100)[1][key % 100]
 
         child_uri = '%s%s' % (self.uri, key)
         return EntityProxy(self.celly, child_uri, self.children)
 
     @property
     def list(self):
-        return list(self)
+        return self.page(0)[1]
+
+    def page(self, page=0):
+        out = []
+        data = self.celly.request(self.uri + '?page=%i' % page)
+        for item in data['items']:
+            child_uri = '%s%s' % (self.uri, guess_key(item))
+            out.append(EntityProxy(self.celly, child_uri, self.children))
+
+        return data['total'], out
 
     def post(self, desired):
         result = self.celly.request(self.uri, 'POST', cjson.encode(desired))
