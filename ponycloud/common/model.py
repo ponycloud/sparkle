@@ -57,7 +57,7 @@ class Model(object):
         self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'), nm_indexes=[('disk', 'host_disk', 'host')])
         self.extent           = Entity(self, 'extent', indexes=['volume', 'storage_pool'])
         self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk'), ('host', 'host_instance', 'instance')])
-        self.image            = Entity(self, 'image', nm_indexes=[('image', 'tenant_image', 'tenant')])
+        self.image            = Entity(self, 'image', indexes=['tenant'], nm_indexes=[('image', 'tenant_image', 'tenant')])
         self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'], nm_indexes=[('instance', 'host_instance', 'host')])
         self.logical_volume   = Entity(self, 'logical_volume', indexes=['storage_pool', 'raid'])
         self.member           = Entity(self, 'member', indexes=['tenant', 'user'])
@@ -68,7 +68,7 @@ class Model(object):
         self.raid             = Entity(self, 'raid', indexes=['host'])
         self.route            = Entity(self, 'route', indexes=['network'])
         self.storage_pool     = Entity(self, 'storage_pool')
-        self.switch           = Entity(self, 'switch', nm_indexes=[('switch', 'tenant_switch', 'tenant')])
+        self.switch           = Entity(self, 'switch', indexes=['tenant'], nm_indexes=[('switch', 'tenant_switch', 'tenant')])
         self.tenant           = Entity(self, 'tenant', nm_indexes=[('tenant', 'tenant_switch', 'switch')])
         self.tenant_image     = Entity(self, 'tenant_image', pkey=(('tenant', 'image'), ('uuid', 'uuid')), indexes=['tenant', 'image'])
         self.tenant_switch    = Entity(self, 'tenant_switch', pkey=(('tenant', 'switch'), ('uuid', 'uuid')), indexes=['tenant', 'switch'])
@@ -159,7 +159,7 @@ class Entity(object):
         self.model = model
         self.table = table
         self.pkey = pkey
-        self.indexes = indexes
+        self.indexes = set(indexes)
         self.nm_indexes = nm_indexes
 
         # Tables that provide N:M indexes.
@@ -213,15 +213,19 @@ class Entity(object):
                 row = self.nmdata[nmkey]
                 del self.nmdata[nmkey]
 
-                # Remove old index record.
-                oldkey = find_key(row, remote)
-                self.index[remote][oldkey].remove(row[local])
-                if 0 == len(self.index[remote][oldkey]):
-                    del self.index[remote][oldkey]
+                # Both N:M and usual index could have been used.
+                # Make sure we don't remove the record if that's the case.
+                if remote in self.indexes:
+                    if self.data[nmkey[0]].get(remote) != nmkey[0]:
+                        if nmkey[0] in self.index[remote][nmkey[1]]:
+                            self.index[remote][nmkey[1]].remove(nmkey[0])
+                            if 0 == len(self.index[remote][nmkey[1]]):
+                                del self.index[remote][nmkey[1]]
 
-                # Apply the update.
+                # Apply the update to the row for the next section.
                 row.update(new)
             else:
+                # We have no old row, so just go with the plain new one.
                 row = new
 
             if len(row) > 0:
@@ -239,7 +243,7 @@ class Entity(object):
         assert table == self.table
 
         for state in ('desired', 'current'):
-            if state in old:
+            if old.get(state) is not None:
                 # Get the primary key.
                 pkey = get_pkey(old[state], self.pkey[0])
 
@@ -262,7 +266,7 @@ class Entity(object):
                         del self.index[idx][value]
 
         for state in ('desired', 'current'):
-            if state in new is not None:
+            if new.get(state) is not None:
                 # Get the primary key.
                 pkey = get_pkey(new[state], self.pkey[0])
 
