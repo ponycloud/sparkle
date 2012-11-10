@@ -35,8 +35,15 @@ class CollectionProxy(object):
         return iter(out)
 
     def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self)[key]
+
         child_uri = '%s%s' % (self.uri, key)
         return EntityProxy(self.celly, child_uri, self.children)
+
+    @property
+    def list(self):
+        return list(self)
 
     def post(self, desired):
         result = self.celly.request(self.uri, 'POST', cjson.encode(desired))
