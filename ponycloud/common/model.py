@@ -15,6 +15,16 @@ def combined_keys(row, key):
     return s
 
 
+def find_key(row, key):
+    """Returns key from the row states. There must be only one such key."""
+    keys = combined_keys(row, key)
+    if len(keys) > 1:
+        raise KeyError('each state have a different key')
+    if len(keys) > 0:
+        return keys.pop()
+    return None
+
+
 def get_pkey(row, pkey):
     """Returns (possibly composite) primary key value."""
     if isinstance(pkey, tuple):
@@ -47,7 +57,7 @@ class Model(object):
         self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'), nm_indexes=[('disk', 'host_disk', 'host')])
         self.extent           = Entity(self, 'extent', indexes=['volume', 'storage_pool'])
         self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk'), ('host', 'host_instance', 'instance')])
-        self.image            = Entity(self, 'image', indexes=['tenant'])
+        self.image            = Entity(self, 'image', nm_indexes=[('image', 'tenant_image', 'tenant')])
         self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'], nm_indexes=[('instance', 'host_instance', 'host')])
         self.logical_volume   = Entity(self, 'logical_volume', indexes=['storage_pool', 'raid'])
         self.member           = Entity(self, 'member', indexes=['tenant', 'user'])
@@ -168,16 +178,11 @@ class Entity(object):
     def clear(self):
         """Throws away all data."""
 
-        # Throw away everything.
         self.data = {}
         self.pkeys = set()
-        self.index = {}
+        self.nmdata = {t: {} for t in self.nm_tables}
 
-        # Initialize normal indexes.
-        for idx in self.indexes:
-            self.index[idx] = {}
-
-        # Initialize N:M indexes.
+        self.index = {i: {} for i in self.indexes}
         for local, table, remote in self.nm_indexes:
             self.index[remote] = {}
 
@@ -196,24 +201,37 @@ class Entity(object):
         N:M mapping tables.
         """
 
-        # If the notification is about a join table, we have less work.
-        # Plus joins like this are only possible on the desired state.
         if table in self.nm_tables:
             local, table, remote = [nm for nm in self.nm_indexes \
-                                       if nm[1] == table].pop()
+                                       if nm[1] == table][0]
 
-            if old.get('desired') is not None:
-                # We need to remove the old link.
-                self.index[remote][old['desired'][remote]].remove(old['desired'][local])
-                if 0 == len(self.index[remote][old['desired'][remote]]):
-                    del self.index[remote][old['desired'][remote]]
+            if len(old) > 0:
+                # Get N:M table key.
+                nmkey = (find_key(old, local), find_key(old, remote))
 
-            if new.get('desired') is not None:
-                # We need to install new link.
-                self.index[remote].setdefault(new['desired'][remote], set())
-                self.index[remote][new['desired'][remote]].add(new['desired'][local])
+                # Remove the old N:M table row.
+                row = self.nmdata[nmkey]
+                del self.nmdata[nmkey]
 
-            # That's it for N:M tables, primary table handling below.
+                # Remove old index record.
+                oldkey = find_key(row, remote)
+                self.index[remote][oldkey].remove(row[local])
+                if 0 == len(self.index[remote][oldkey]):
+                    del self.index[remote][oldkey]
+
+                # Apply the update.
+                row.update(new)
+            else:
+                row = new
+
+            if len(row) > 0:
+                # Add new index record.
+                newkey = find_key(row, remote)
+                newval = find_key(row, local)
+                self.index[remote].setdefault(newkey, set())
+                self.index[remote][newkey].add(newval)
+
+            # That's it for this table.
             return
 
 
@@ -221,7 +239,7 @@ class Entity(object):
         assert table == self.table
 
         for state in ('desired', 'current'):
-            if old.get(state) is not None:
+            if state in old:
                 # Get the primary key.
                 pkey = get_pkey(old[state], self.pkey[0])
 
@@ -244,7 +262,7 @@ class Entity(object):
                         del self.index[idx][value]
 
         for state in ('desired', 'current'):
-            if new.get(state) is not None:
+            if state in new is not None:
                 # Get the primary key.
                 pkey = get_pkey(new[state], self.pkey[0])
 
