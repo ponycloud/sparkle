@@ -132,6 +132,7 @@ class Manager(object):
         self.router = router
         self.incarnation = uuidgen()
         self.model = Model()
+        self.hosts = {}
 
 
     def start(self):
