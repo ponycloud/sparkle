@@ -192,6 +192,7 @@ class Manager(object):
             old_model = self.model
             self.model = new_model
             self.model.apply_changes(old_model.dump('current'))
+            self.incarnation = uuidgen()
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
