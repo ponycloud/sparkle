@@ -3,8 +3,29 @@
 __all__ = []
 
 from psycopg2.extensions import *
+from sqlalchemy.types import UserDefinedType
+from sqlalchemy.dialects.postgresql.base import ischema_names
 
 import cjson
+
+def make_transparent_type(name):
+    class TransparentType(UserDefinedType):
+        def get_col_spec(self):
+            return name
+
+        def bind_processor(self, dialect):
+            def process(value):
+                return value
+            return process
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                return value
+            return process
+    return TransparentType
+
+ischema_names['json'] = make_transparent_type('JSON')
+ischema_names['int8range'] = make_transparent_type('INT8RANGE')
 
 # Register inet as string type.
 register_type(new_type((869,), 'INET', UNICODE))
