@@ -299,11 +299,19 @@ class Entity(object):
         return None
 
 
-    def get(self, key):
-        """
-        Retrieves item using the primary key.
-        """
+    def __getitem__(self, key):
+        """Retrieves item using the primary key."""
         return self.data[key]
+
+
+    def __iter__(self):
+        """Iterates over primary keys."""
+        return iter(self.data)
+
+
+    def get(self, key, default=None):
+        """Retrieves item by primary key or return a default value."""
+        return self.data.get(key, default)
 
 
     def list(self, **keys):

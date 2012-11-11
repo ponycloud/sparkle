@@ -279,7 +279,7 @@ class Manager(object):
 
         try:
             name = path[-1]
-            return getattr(self.model, name).get(keys[name])
+            return getattr(self.model, name)[keys[name]]
         except KeyError:
             raise PathError('%s/%s not found' % (name, keys[name]))
 
@@ -330,7 +330,7 @@ class Manager(object):
         self.model.apply_changes(changes)
 
         # Return new desired state of the entity.
-        return getattr(self.model, name).get(keys[path[-1]])['desired']
+        return getattr(self.model, name)[keys[path[-1]]]['desired']
     # /def update_entity
 
 
