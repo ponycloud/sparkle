@@ -57,15 +57,15 @@ class Model(object):
             for row in table.itervalues():
                 for state in states:
                     if getattr(row, state) is not None:
-                        out.append((name, state, row.pkey, getattr(row, state)))
+                        out.append((name, row.pkey, state, getattr(row, state)))
 
         return out
 
 
     def load(self, data):
         """Load previously dumped data."""
-        for name, state, pkey, part in data:
-            self.tables[name].update_row(state, pkey, part)
+        for name, pkey, state, part in data:
+            self.tables[name].update_row(pkey, state, part)
 # /class Model
 
 
