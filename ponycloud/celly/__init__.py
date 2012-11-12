@@ -96,7 +96,7 @@ class Celly(object):
     Ponycloud RESTful API client.
     """
 
-    def __init__(self, base_uri):
+    def __init__(self, base_uri='http://127.0.0.1:9860'):
         """Queries the API and constructs client accordingly."""
         self.uri = base_uri
         self.http = Http()
