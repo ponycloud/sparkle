@@ -160,16 +160,12 @@ class Manager(object):
             # Create the replacement model.
             model = Model()
 
-            for table, entities in model.table_map.items():
-                # Ignore virtual tables, they do not exist in database.
-                if table in model.virtual:
-                    continue
-
-                # Load the data for the `real' ones.
-                for row in getattr(self.db, table).all():
-                    row = {c.name: getattr(row, c.name) for c in row.c}
-                    for ent in entities:
-                        ent.notify(table, {}, {'desired': row})
+            for name, table in model.items():
+                if not table.virtual:
+                    for row in getattr(self.db, name).all():
+                        part = {c.name: getattr(row, c.name) for c in row.c}
+                        pkey = table.primary_key(part)
+                        table.update_row(pkey, 'desired', part)
 
             # Return finished model to replace the current one.
             return model
@@ -191,7 +187,7 @@ class Manager(object):
 
             old_model = self.model
             self.model = new_model
-            self.model.apply_changes(old_model.dump('current'))
+            self.model.load(old_model.dump(['current']))
             self.incarnation = uuidgen()
 
         # Configure where to go from there.
@@ -226,7 +222,7 @@ class Manager(object):
         """
 
         for child in path[1:]:
-            if 0 == len(getattr(self.model, child).list(**keys)):
+            if 0 == len(self.model[child].list(**keys)):
                 raise PathError('%s/%s not found' % (child, keys[child]))
 
 
@@ -238,12 +234,18 @@ class Manager(object):
         changes = []
 
         # Retrieve all changes done by the current transaction.
-        # Mentioning only desired state (which is what this is about)
-        # will cause Model to update only that part of entities.
         for row in self.db.changelog.order_by(self.db.changelog.id).all():
-            old_data = {'desired': row.old_data}
-            new_data = {'desired': row.new_data}
-            changes.append((row.entity, old_data, new_data))
+            # We need to know the corresponding table in our model.
+            table = self.model[row.entity]
+
+            # Identify the primary key of the row.
+            if row.new_data is None:
+                pkey = table.primary_key(row.old_data)
+            else:
+                pkey = table.primary_key(row.new_data)
+
+            # Create loadable entry.
+            changes.append((row.entity, pkey, 'desired', row.new_data))
 
         # Changelog needs to be emptied afterwards.
         # There is a trigger that won't otherwise allow commit.
@@ -262,7 +264,7 @@ class Manager(object):
         # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
         self._validate_path(path, keys)
-        state = getattr(self.model, collection).list(**keys)
+        state = [row.to_dict() for row in self.model[collection].list(**keys)]
 
         # Return limited results, 100 per page.
         limited = state[page * 100 : (page + 1) * 100]
@@ -280,7 +282,7 @@ class Manager(object):
 
         try:
             name = path[-1]
-            return getattr(self.model, name)[keys[name]]
+            return self.model[name][keys[name]].to_dict()
         except KeyError:
             raise PathError('%s/%s not found' % (name, keys[name]))
 
@@ -303,15 +305,15 @@ class Manager(object):
 
         # Get info about the entity.
         name = path[-1]
-        node = getattr(self.model, name)
+        table = self.model[name]
         entity = getattr(self.db, name)
 
         # This just does not make sense for virtual entities.
-        if name in self.model.virtual:
+        if table.virtual:
             raise UserError('cannot update virtual entity')
 
         # Get the current object.
-        obj = entity.filter_by(**{node.pkey[0]: keys[name]}).one()
+        obj = entity.filter_by(**{table.pkey: keys[name]}).one()
 
         # Apply the update to individual columns.
         # Ignore uuid updates, there is no way we are going to allow
@@ -328,10 +330,10 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.apply_changes(changes)
+        self.model.load(changes)
 
         # Return new desired state of the entity.
-        return getattr(self.model, name)[keys[path[-1]]]['desired']
+        return self.model[name][keys[path[-1]]].desired
     # /def update_entity
 
 
@@ -351,11 +353,11 @@ class Manager(object):
 
         # Get info about the entity.
         name = path[-1]
-        node = getattr(self.model, name)
+        table = self.model[name]
         entity = getattr(self.db, name)
 
         # Do not allow to create virtual entities.
-        if name in self.model.virtual:
+        if table.virtual:
             raise UserError('cannot create virtual entity')
 
         # Make sure we do not set uuid, database will generate one for us.
@@ -373,12 +375,12 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.apply_changes(changes)
+        self.model.load(changes)
 
         # Return desired state of the new entity.
-        for table, old, new in changes:
+        for table, pkey, state, part in changes:
             if table == name:
-                return new['desired']
+                return part
 
         # Or just a poor None if we've failed (which is not very probable).
         return None
@@ -397,15 +399,15 @@ class Manager(object):
 
         # Get info about the entity.
         name = path[-1]
-        node = getattr(self.model, name)
+        table = self.model[name]
         entity = getattr(self.db, name)
 
         # This just does not make sense for virtual entities.
-        if name in self.model.virtual:
+        if table.virtual:
             raise UserError('cannot delete virtual entity')
 
         # Attempt deletion of the entity.
-        entity.filter_by(**{node.pkey[0]: keys[name]})\
+        entity.filter_by(**{table.pkey: keys[name]})\
                 .delete(synchronize_session=False)
 
         # Get data from the changelog.
@@ -416,7 +418,7 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.apply_changes(changes)
+        self.model.load(changes)
 
         # Well...
         return None

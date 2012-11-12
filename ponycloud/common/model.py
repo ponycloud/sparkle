@@ -1,337 +1,475 @@
 #!/usr/bin/python -tt
 
-"""
-Sparkle Data Model
-"""
-
-def combined_keys(row, key):
-    """
-    Returns combined set of values under same key in both row states.
-    """
-    s = set()
-    for state in row.values():
-        if state is not None and key in state:
-            s.add(state[key])
-    return s
-
-
-def find_key(row, key):
-    """Returns key from the row states. There must be only one such key."""
-    keys = combined_keys(row, key)
-    if len(keys) > 1:
-        raise KeyError('each state have a different key')
-    if len(keys) > 0:
-        return keys.pop()
-    return None
-
-
-def get_pkey(row, pkey):
-    """Returns (possibly composite) primary key value."""
-    if isinstance(pkey, tuple):
-        for k in pkey:
-            if k not in row:
-                return None
-        return tuple([row[k] for k in pkey])
-    return row.get(pkey, None)
-
+__all__ = ['Model']
 
 class Model(object):
     """
-    Encapsulates the whole Sparkle data model.
+    PonyCloud Data Model
+
+    This model holds both the current and desired state of all managed
+    entities plus some join tables.  Most of the desired state corresponds
+    to database tables, rest are virtual tables that only exist in memory.
+    Current state resides in memory only and copies desired state entity
+    primary keys when not completely standalone.
     """
 
     def __init__(self):
+        """Constructs the model."""
+
+        # Prepare all model tables.
+        self.tables = {t.name: t() for t in TABLES}
+
+        # Let tables watch other tables for some relations to work.
+        for table in self.tables.values():
+            table.add_watches(self)
+
+
+    def __getitem__(self, name):
+        """Retrieves table by it's name."""
+        return self.tables[name]
+
+
+    def __iter__(self):
+        """Iterates over table names."""
+        return iter(self.tables)
+
+
+    def __contains__(self, name):
+        """Returns True if table exists."""
+        return name in self.tables
+
+
+    def items(self):
+        """Returns `(name, table)' tuples."""
+        return self.tables.items()
+
+
+    def dump(self, states=['desired', 'current']):
         """
-        Initializes the model.
+        Dump given states from all table rows.
+
+        The output format (compatible with Model.load) is
+        `[(table, state, pkey, part), ...]`.
         """
-
-        # Map of tables to entities that need to receive notifications.
-        self.table_map = {}
-
-        # Database entities.
-        self.address          = Entity(self, 'address', indexes=['network', 'vnic'])
-        self.bond             = Entity(self, 'bond', indexes=['host'])
-        self.cluster          = Entity(self, 'cluster', indexes=['tenant'])
-        self.cluster_instance = Entity(self, 'cluster_instance', indexes=['cluster', 'instance'])
-        self.cpu_profile      = Entity(self, 'cpu_profile')
-        self.disk             = Entity(self, 'disk', pkey=('id', 'varchar'), nm_indexes=[('disk', 'host_disk', 'host')])
-        self.extent           = Entity(self, 'extent', indexes=['volume', 'storage_pool'])
-        self.host             = Entity(self, 'host', nm_indexes=[('host', 'host_disk', 'disk'), ('host', 'host_instance', 'instance')])
-        self.image            = Entity(self, 'image', indexes=['tenant'], nm_indexes=[('image', 'tenant_image', 'tenant')])
-        self.instance         = Entity(self, 'instance', indexes=['cpu_profile', 'tenant'], nm_indexes=[('instance', 'host_instance', 'host')])
-        self.logical_volume   = Entity(self, 'logical_volume', indexes=['storage_pool', 'raid'])
-        self.member           = Entity(self, 'member', indexes=['tenant', 'user'])
-        self.network          = Entity(self, 'network', indexes=['switch'])
-        self.nic              = Entity(self, 'nic', pkey=('hwaddr', 'varchar'), indexes=['bond'])
-        self.nic_role         = Entity(self, 'nic_role', indexes=['bond'])
-        self.quota            = Entity(self, 'quota', indexes=['tenant'])
-        self.raid             = Entity(self, 'raid', indexes=['host'])
-        self.route            = Entity(self, 'route', indexes=['network'])
-        self.storage_pool     = Entity(self, 'storage_pool')
-        self.switch           = Entity(self, 'switch', indexes=['tenant'], nm_indexes=[('switch', 'tenant_switch', 'tenant')])
-        self.tenant           = Entity(self, 'tenant', nm_indexes=[('tenant', 'tenant_switch', 'switch')])
-        self.tenant_image     = Entity(self, 'tenant_image', pkey=(('tenant', 'image'), ('uuid', 'uuid')), indexes=['tenant', 'image'])
-        self.tenant_switch    = Entity(self, 'tenant_switch', pkey=(('tenant', 'switch'), ('uuid', 'uuid')), indexes=['tenant', 'switch'])
-        self.user             = Entity(self, 'user', pkey=('email', 'varchar'))
-        self.vdisk            = Entity(self, 'vdisk', indexes=['instance', 'volume'])
-        self.vnic             = Entity(self, 'vnic', indexes=['instance', 'switch'])
-        self.volume           = Entity(self, 'volume', indexes=['tenant', 'storage_pool'])
-
-        # Set of virtual tables that do not exist in database.
-        self.virtual = set(['host_disk', 'host_instance'])
-
-        # Virtual entities.
-        self.host_disk = Entity(self, 'host_disk', pkey=(('host', 'disk'), ('uuid', 'uuid')), indexes=['host', 'disk'])
-        self.host_instance = Entity(self, 'host_instance', pkey=(('host', 'instance'), ('uuid', 'uuid')), indexes=['host', 'instance'])
-    # /def __init__
-
-
-    def apply_changes(self, changes):
-        """
-        Applies set of changes.
-
-        Changes format is `[(table, old_value, new_value), ...]`.
-
-        The old_value and new_value is dict with keys 'desired' and 'current'.
-        If only one part is supplied, the other one is not affected by the
-        change.  This allows for desired state updates that do not affect
-        current state and vice versa.
-        """
-
-        # Iterate over changes.
-        for table, old, new in changes:
-            # Notify correct tables about the change.
-            for ent in self.table_map.get(table, []):
-                ent.notify(table, old, new)
-
-
-    def dump(self, states=['current', 'desired']):
-        """Dumps specified state from all rows as a changelog."""
-
         out = []
 
-        for table in dir(self):
-            entity = getattr(self, table)
-            if not isinstance(entity, Entity):
-                continue
-
-            for row in entity.dump(states):
-                out.append(row)
+        for name, table in self.tables.items():
+            for row in table.itervalues():
+                for state in states:
+                    if getattr(row, state) is not None:
+                        out.append((name, state, row.pkey, getattr(row, state)))
 
         return out
 
 
-    def clear(self):
-        """
-        Throws away all data.
-        """
-
-        for table in dir(self):
-            entity = getattr(self, table)
-            if isinstance(entity, Entity):
-                entity.clear()
-    # /def clear
-
+    def load(self, data):
+        """Load previously dumped data."""
+        for name, state, pkey, part in data:
+            self.tables[name].update_row(state, pkey, part)
 # /class Model
 
 
-class Entity(object):
+class Table(object):
     """
-    Encapsulates collection of entities.
+    Data Model Table
+
+    Whole model is organized into indexed tables with changes
+    propagated by a notification system.
+
+    Every table have a unique primary key or set of them,
+    as in case of join tables.  Any of the columns can also
+    be indexed for queries.
     """
 
-    def __init__(self, model, table, pkey=('uuid', 'uuid'), \
-                       indexes=[], nm_indexes=[]):
+    # Name of the table within the model.
+    name = None
+
+    # True if not database backed.
+    virtual = False
+
+    # Name of the primary key column or a tuple if composite.
+    pkey = 'uuid'
+
+    # Columns to index rows by.
+    indexes = []
+
+    # Join tables for additional indexing.
+    # Every item is in the form `{'table': ('local', 'remote')}`,
+    # where `local` is the column refering to the local primary key and
+    # `remote` the column to index by.
+    nm_indexes = {}
+
+
+    def __init__(self):
+        """Prepare internal data structures of the table."""
+
+        # Start with empty indexes.
+        self.rows = {}
+        self.index = {i: {'desired': {}, 'current': {}} \
+                      for i in self.indexes}
+        self.nm_index = {r: {'desired': {}, 'current': {}} \
+                         for l, r in self.nm_indexes.values()}
+
+        # Callbacks that subscribe to row events.
+        self.before_row_update_callbacks = set()
+        self.after_row_update_callbacks = set()
+
+
+    @classmethod
+    def primary_key(cls, row):
+        """Returns primary key for specified row dictionary."""
+        if isinstance(cls.pkey, tuple):
+            return tuple([row[k] for k in cls.pkey])
+        return row[cls.pkey]
+
+
+    def add_watches(self, model):
+        """Called to give table chance to watch other tables."""
+
+        # Receive notifications about changes in join tables
+        # and use them to build nm indexes.
+        for table in self.nm_indexes:
+            model[table].on_before_row_update(self.nm_unindex_row)
+            model[table].on_after_row_update(self.nm_index_row)
+
+
+    def on_before_row_update(self, callback):
+        """Register function to call before modifying a row."""
+        self.before_row_update_callbacks.add(callback)
+
+
+    def on_after_row_update(self, callback):
+        """Register function to call after a row is modified."""
+        self.after_row_update_callbacks.add(callback)
+
+
+    def update_row(self, pkey, state, part):
         """
-        Initializes the collection.
+        Update/patch table row.
 
-        Parameters:
-            model      -- Sparkle database model instance
-            table      -- name of the underlying sqlsoup table
-            pkey       -- tuple with (name, type) of the primary key,
-                          if the key is composite, tuple of tuples
-            indexes    -- list fields to index for lookup
-            nm_indexes -- list of (join_left join_table join_right)
-                          tuples describing N:M relation to index
+        Partial row contents are used to patch the row in question.
+        If the part value is None, the specified state is completely
+        removed and if the row have no states, it is deleted completely.
         """
 
-        # Store the arguments.
-        self.model = model
-        self.table = table
-        self.pkey = pkey
-        self.indexes = set(indexes)
-        self.nm_indexes = nm_indexes
+        if pkey in self.rows:
+            # Row already exists, unindex it so that it can be modified.
+            row = self.rows[pkey]
+            row.unindex(self)
+        else:
+            # Create new row object and add it to the table.
+            self.rows[pkey] = row = Row(pkey)
 
-        # Tables that provide N:M indexes.
-        self.nm_tables = set([nm[1] for nm in self.nm_indexes])
+        # Fire callbacks to inform subscribers that the row will change.
+        for callback in self.before_row_update_callbacks:
+            callback(self, row)
 
-        # Initialize through clearing.
-        self.clear()
-
-        # We need to be notified about table changes.
-        for table in [self.table] + list(self.nm_tables):
-            self.model.table_map.setdefault(table, set())
-            self.model.table_map[table].add(self)
-    # /def __init__
-
-
-    def clear(self):
-        """Throws away all data."""
-
-        self.data = {}
-        self.pkeys = set()
-        self.nmdata = {t: {} for t in self.nm_tables}
-
-        self.index = {i: {} for i in self.indexes}
-        for local, table, remote in self.nm_indexes:
-            self.index[remote] = {}
-
-
-    def dump(self, states=['desired', 'current']):
-        """Dumps specified state from all rows as a changelog."""
-        return [(self.table, {}, \
-                 {k: v for k, v in self.data.items() if k in states})]
-
-
-    def notify(self, table, old, new):
-        """
-        Called when a row have been updated.
-
-        Notification is issued for both the primary table and all
-        N:M mapping tables.
-        """
-
-        if table in self.nm_tables:
-            local, table, remote = [nm for nm in self.nm_indexes \
-                                       if nm[1] == table][0]
-
-            if len(old) > 0:
-                # Get N:M table key.
-                nmkey = (find_key(old, local), find_key(old, remote))
-
-                # Remove the old N:M table row.
-                row = self.nmdata[nmkey]
-                del self.nmdata[nmkey]
-
-                # Both N:M and usual index could have been used.
-                # Make sure we don't remove the record if that's the case.
-                if remote in self.indexes:
-                    if self.data[nmkey[0]].get(remote) != nmkey[0]:
-                        if nmkey[0] in self.index[remote][nmkey[1]]:
-                            self.index[remote][nmkey[1]].remove(nmkey[0])
-                            if 0 == len(self.index[remote][nmkey[1]]):
-                                del self.index[remote][nmkey[1]]
-
-                # Apply the update to the row for the next section.
-                row.update(new)
+        if part is None:
+            # Remove the corresponding row part.
+            setattr(row, state, None)
+        else:
+            # Patch the corresponding row part.
+            if getattr(row, state) is None:
+                setattr(row, state, part)
             else:
-                # We have no old row, so just go with the plain new one.
-                row = new
+                getattr(row, state).update(part)
 
-            if len(row) > 0:
-                # Add new index record.
-                newkey = find_key(row, remote)
-                newval = find_key(row, local)
-                self.index[remote].setdefault(newkey, set())
-                self.index[remote][newkey].add(newval)
+        if row.desired is None and row.current is None:
+            # Delete the row completely.
+            del self.rows[pkey]
+        else:
+            # Index the updated row.
+            row.index(self)
 
-            # That's it for this table.
-            return
+        # Fire callbacks to inform subscribers that now row is in place.
+        for callback in self.after_row_update_callbacks:
+            callback(self, row)
 
 
-        # Make sure we have been notified correctly.
-        assert table == self.table
+    def nm_unindex_row(self, table, row):
+        """Unindexes join table row."""
 
-        for state in ('desired', 'current'):
-            if old.get(state) is not None:
-                # Get the primary key.
-                pkey = get_pkey(old[state], self.pkey[0])
-
-                # We need to remove this state from the row.
-                del self.data[pkey][state]
-
-                # It that was all that was left from this row,
-                # remove the row completely.
-                if 0 == len(self.data[pkey]):
-                    del self.data[pkey]
-                    self.pkeys.remove(pkey)
-
-        # We might also need to remove all secondary indexes.
-        pkey = self._primary_key(old)
-        if pkey is not None:
-            for idx in self.indexes:
-                for value in combined_keys(old, idx):
-                    self.index[idx][value].remove(pkey)
-                    if 0 == len(self.index[idx][value]):
-                        del self.index[idx][value]
+        local, remote = self.nm_indexes[table.name]
 
         for state in ('desired', 'current'):
-            if new.get(state) is not None:
-                # Get the primary key.
-                pkey = get_pkey(new[state], self.pkey[0])
-
-                # We need to install the portion of the row.
-                if pkey not in self.data:
-                    self.data[pkey] = new
-                    self.pkeys.add(pkey)
-                else:
-                    self.data[pkey].update(new)
-
-        # We might also need to add associated secondary indexes.
-        pkey = self._primary_key(new)
-        if pkey is not None:
-            for idx in self.indexes:
-                for value in combined_keys(new, idx):
-                    self.index[idx].setdefault(value, set())
-                    self.index[idx][value].add(pkey)
-    # /def notify
+            part = getattr(row, state)
+            if part is not None and remote in part and local in part:
+                self.nm_index[remote][state][part[remote]].remove(part[local])
+                if 0 == len(self.nm_index[remote][state][part[remote]]):
+                    del self.nm_index[remote][state][part[remote]]
 
 
-    def _primary_key(self, row):
-        """
-        Returns primary key for given row, if it contains at least one state.
-        """
-        for state in row.values():
-            if state is not None:
-                pkey = get_pkey(state, self.pkey[0])
-                if pkey is not None:
-                    return pkey
-        return None
+    def nm_index_row(self, table, row):
+        """Indexes join table row."""
+
+        local, remote = self.nm_indexes[table.name]
+
+        for state in ('desired', 'current'):
+            part = getattr(row, state)
+            if part is not None and remote in part and local in part:
+                self.nm_index[remote][state].setdefault(part[remote], set())
+                self.nm_index[remote][state][part[remote]].add(part[local])
 
 
-    def __getitem__(self, key):
-        """Retrieves item using the primary key."""
-        return self.data[key]
+    def __getitem__(self, pkey):
+        """Retrieves row by it's primary key."""
+        return self.rows[pkey]
+
+
+    def __contains__(self, pkey):
+        """Returns True if a row with given primary key exists."""
+        return pkey in self.rows
 
 
     def __iter__(self):
-        """Iterates over primary keys."""
-        return iter(self.data)
+        """Iterates over all primary keys."""
+        return self.rows.iterkeys()
 
 
-    def get(self, key, default=None):
-        """Retrieves item by primary key or return a default value."""
-        return self.data.get(key, default)
+    def itervalues(self):
+        """Iterates over all rows."""
+        return self.rows.itervalues()
 
 
     def list(self, **keys):
-        """
-        Retrieves list of items using selected secondary keys.
+        """Return rows with indexed columns matching given keys."""
 
-        If the index is not known, we gracefully ignore it.
-        """
+        # None here means all rows, so that we don't have to maintain
+        # redundant index of all primary keys.
+        selection = None
 
-        # Start with all primary keys.
-        pkeys = self.pkeys
-
-        # For every additional key, reduce the set.
         for k, v in keys.items():
-            if k in self.index:
-                pkeys = pkeys.intersection(self.index[k].get(v, set()))
+            if k not in self.index and k not in self.nm_index:
+                continue
 
-        return [self.data[pk] for pk in pkeys]
+            subselection = set()
+            for idx in self.index, self.nm_index:
+                for state in ('desired', 'current'):
+                    if k in idx and v in idx[k][state]:
+                        subselection.update(idx[k][state][v])
 
-# /class Entity
+            if selection is None:
+                selection = subselection
+            else:
+                selection.intersection_update(subselection)
+
+        if selection is None:
+            return self.rows.values()
+        return [self.rows[k] for k in selection]
+# /class Table
+
+
+class Row(object):
+    # Each row have two parts, one for each "state".
+    __slots__ = ['pkey', 'desired', 'current']
+
+
+    def __init__(self, pkey):
+        """Initializes the row."""
+        self.pkey = pkey
+        self.desired = None
+        self.current = None
+
+
+    def __getitem__(self, key):
+        """Returns key from either state, desired first."""
+
+        if self.desired is not None and key in self.desired:
+            return self.desired[key]
+
+        if self.current is not None and key in self.current:
+            return self.current[key]
+
+        raise KeyError('key %s not found in either state' % key)
+
+
+    def index(self, table):
+        """Index the row into the table's indexes."""
+        for state in ('desired', 'current'):
+            for idx in table.indexes:
+                part = getattr(self, state)
+                if part is not None and idx in part:
+                    table.index[idx][state].setdefault(part[idx], set())
+                    table.index[idx][state][part[idx]].add(self.pkey)
+
+
+    def unindex(self, table):
+        """Remove the row from table's indexes."""
+        for state in ('desired', 'current'):
+            for idx in table.indexes:
+                part = getattr(self, state)
+                if part is not None and idx in part:
+                    table.index[idx][state][part[idx]].remove(self.pkey)
+                    if 0 == len(table.index[idx][state][part[idx]]):
+                        del table.index[idx][state][part[idx]]
+
+
+    def to_dict(self):
+        return {'desired': self.desired, 'current': self.current}
+# /class Row
+
+
+class Address(Table):
+    name = 'address'
+    indexes = ['network', 'vnic']
+
+
+class Bond(Table):
+    name = 'bond'
+    indexes = ['host']
+
+
+class Cluster(Table):
+    name = 'cluster'
+    indexes = ['tenant']
+
+
+class ClusterInstance(Table):
+    name = 'cluster_instance'
+    indexes = ['cluster', 'instance']
+
+
+class CPUProfile(Table):
+    name = 'cpu_profile'
+
+
+class Disk(Table):
+    name = 'disk'
+    pkey = 'id'
+    nm_indexes = {'host_disk': ('disk', 'host')}
+
+
+class Extent(Table):
+    name = 'extent'
+    indexes = ['volume', 'storage_pool']
+
+
+class Host(Table):
+    name = 'host'
+    nm_indexes = {'host_disk':     ('host', 'disk'),
+                  'host_instance': ('host', 'instance')}
+
+
+class Image(Table):
+    name = 'image'
+    indexes = ['tenant']
+    nm_indexes = {'tenant_image': ('image', 'tenant')}
+
+
+class Instance(Table):
+    name = 'instance'
+    indexes = ['cpu_profile', 'tenant']
+    nm_indexes = {'host_instance': ('instance', 'host')}
+
+
+class LogicalVolume(Table):
+    name = 'logical_volume'
+    indexes = ['storage_pool', 'raid']
+
+
+class Member(Table):
+    name = 'member'
+    indexes = ['tenant', 'user']
+
+
+class Network(Table):
+    name = 'network'
+    indexes = ['switch']
+
+
+class NIC(Table):
+    name = 'nic'
+    pkey = 'hwaddr'
+    indexes = ['bond']
+
+
+class NICRole(Table):
+    name = 'nic_role'
+    indexes = ['bond']
+
+
+class Quota(Table):
+    name = 'quota'
+    indexes = ['tenant']
+
+
+class RAID(Table):
+    name = 'raid'
+    indexes = ['host']
+
+
+class Route(Table):
+    name = 'route'
+    indexes = ['network']
+
+
+class StoragePool(Table):
+    name = 'storage_pool'
+
+
+class Switch(Table):
+    name = 'switch'
+    indexes = ['tenant']
+    nm_indexes = {'tenant_switch': ('switch', 'tenant')}
+
+
+class Tenant(Table):
+    name = 'tenant'
+    nm_indexes = {'tenant_switch': ('tenant', 'switch')}
+
+
+class TenantImage(Table):
+    name = 'tenant_image'
+    pkey = ('tenant', 'image')
+    indexes = ['tenant', 'image']
+
+
+class TenantSwitch(Table):
+    name = 'tenant_switch'
+    pkey = ('tenant', 'switch')
+    indexes = ['tenant', 'switch']
+
+
+class User(Table):
+    name = 'user'
+    pkey = 'email'
+
+
+class VDisk(Table):
+    name = 'vdisk'
+    indexes = ['instance', 'volume']
+
+
+class VNIC(Table):
+    name = 'vnic'
+    indexes = ['instance', 'switch']
+
+
+class Volume(Table):
+    name = 'volume'
+    indexes = ['tenant', 'storage_pool']
+
+
+class HostDisk(Table):
+    virtual = True
+    name = 'host_disk'
+    pkey = ('host', 'disk')
+    indexes = ['host', 'disk']
+
+
+class HostInstance(Table):
+    virtual = True
+    name = 'host_instance'
+    pkey = ('host', 'instance')
+    indexes = ['host', 'instance']
+
+
+TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk,
+          Extent, Host, Image, Instance, LogicalVolume, Member, Network,
+          NIC, NICRole, Quota, RAID, Route, StoragePool, Switch, Tenant,
+          TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,
+          HostInstance]
+
 
 # vim:set sw=4 ts=4 et:
 # -*- coding: utf-8 -*-
