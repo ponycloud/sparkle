@@ -254,6 +254,11 @@ class Manager(object):
         return changes
 
 
+    def apply_changes(self, changes):
+        """Applies changes to the model and forwards them to Twilights."""
+        self.model.load(changes)
+
+
     @backtrace
     def list_collection(self, path, keys, page=0):
         """
@@ -330,7 +335,7 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.load(changes)
+        self.apply_changes(changes)
 
         # Return new desired state of the entity.
         return self.model[name][keys[path[-1]]].desired
@@ -375,7 +380,7 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.load(changes)
+        self.apply_changes(changes)
 
         # Return desired state of the new entity.
         for table, pkey, state, part in changes:
@@ -418,7 +423,7 @@ class Manager(object):
         self.db.commit()
 
         # Apply changes to the in-memory model.
-        self.model.load(changes)
+        self.apply_changes(changes)
 
         # Well...
         return None
