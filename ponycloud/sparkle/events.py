@@ -18,13 +18,8 @@ def make_event_handler(manager):
             return
 
         # Drop host information for now.
-        if data.get('event') == 'host-info':
-            print 'received host-info'
-            return
-
-        # Forward presence messages.
-        if data.get('event') == 'twilight-presence':
-            return manager.twilight_presence(data, sender)
+        if data.get('event') == 'twilight-state-update':
+            return manager.twilight_state_update(data, sender)
 
         # Print unknown events.
         print 'event', data

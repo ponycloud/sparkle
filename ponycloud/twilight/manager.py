@@ -5,6 +5,7 @@ __all__ = ['Manager']
 from twisted.internet import reactor, task
 
 from ponycloud.common.util import uuidgen
+from ponycloud.common.model import Model
 
 from ponyvirt import Hypervisor
 
@@ -27,11 +28,18 @@ class Manager(object):
         Stores the Sparkle connection for later use and connects to libvirt.
         """
         self.sparkle = sparkle
+        self.incarnation = uuidgen()
 
         print 'connecting to libvirt'
         self.virt = Hypervisor()
         self.uuid = self.virt.sysinfo['system']['uuid'].lower()
-        self.incarnation = uuidgen()
+
+        # Our primary configuration store.  Seed with our identity.
+        self.model = Model()
+        self.model.load([('host', self.uuid, 'current', {
+            'uuid': self.uuid,
+            'incarnation': self.incarnation,
+        })])
 
         print 'connecting to udev'
         self.udev = pyudev.Context()
@@ -42,44 +50,41 @@ class Manager(object):
 
 
     def start(self):
-        """
-        Perform the startup routine.
-
-        It consists of two simple tasks:
-
-         * Proactively send host info.
-         * Start 15s cycle of heartbeat messages.
-        """
+        """Starts periodic tasks."""
         print 'starting manager'
-        self.send_host_info()
-        task.LoopingCall(self.presence).start(15.0)
+
+        # Perform full resync on startup.
+        self.sparkle_resync()
+
+        # Send empty changes every 15 seconds to make sure Sparkle
+        # knows about us.  If we do not do this, we risk being fenced.
+        task.LoopingCall(self.apply_changes, []).start(15.0, now=False)
 
 
-    def send_host_info(self):
-        """
-        Sends system info and hypervisor capabilities to Sparkle.
-        """
-        print 'sending host info'
+    def sparkle_resync(self):
+        """Sends complete current state to Sparkle."""
+        print 'sending full current state to sparkle'
         self.sparkle.send({
-            'event': 'host-info',
             'uuid': self.uuid,
             'incarnation': self.incarnation,
-            'sysinfo': self.virt.sysinfo,
-            'capabilities': self.virt.capabilities,
+            'event': 'twilight-state-update',
+            'changes': self.model.dump(['current']),
         })
 
 
-    def presence(self):
+    def apply_changes(self, changes):
         """
-        Sends notification about our presence and our state.
+        Applies changes to the model and forwards them to Sparkle.
 
-        Normally triggered every 15 seconds. Missing this report
-        by too long will lead to node eviction and immediate fencing.
+        Twilights are not supposed to send desired state,
+        so make sure you only update current state through here.
         """
+        self.model.load(changes)
         self.sparkle.send({
-            'event': 'twilight-presence',
             'uuid': self.uuid,
             'incarnation': self.incarnation,
+            'event': 'twilight-state-update',
+            'changes': changes,
         })
 
 

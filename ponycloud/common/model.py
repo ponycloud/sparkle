@@ -346,6 +346,7 @@ class Extent(Table):
 
 class Host(Table):
     name = 'host'
+    indexes = ['incarnation']
     nm_indexes = {'host_disk':     ('host', 'disk'),
                   'host_instance': ('host', 'instance')}
 

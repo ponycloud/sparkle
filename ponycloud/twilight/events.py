@@ -12,6 +12,9 @@ def make_event_handler(manager):
         Event handler bound to a manager instance.
         """
 
+        if data.get('event') == 'sparkle-resync':
+            return manager.sparkle_resync()
+
         # Print unknown events.
         print 'event', data
 

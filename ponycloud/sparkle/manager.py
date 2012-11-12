@@ -7,6 +7,7 @@ from twisted.internet.threads import deferToThread, blockingCallFromThread
 from twisted.internet.defer import Deferred
 
 from sqlalchemy.exc import OperationalError, DatabaseError
+from sqlalchemy.orm.exc import NoResultFound
 
 from ponycloud.common.util import uuidgen
 from ponycloud.common.model import Model
@@ -44,6 +45,10 @@ def database_operation(fn):
         except Exception, e:
             # Roll back the transaction.
             self.db.rollback()
+
+            # Simplest of errors, record not found.
+            if isinstance(e, NoResultFound):
+                raise PathError('not found')
 
             # If the database is down, notify user gracefully.
             if isinstance(e, OperationalError):
@@ -132,7 +137,6 @@ class Manager(object):
         self.router = router
         self.incarnation = uuidgen()
         self.model = Model()
-        self.hosts = {}
 
 
     def start(self):
@@ -195,21 +199,17 @@ class Manager(object):
     # /def schedule_relate
 
 
-    def twilight_presence(self, msg, sender):
-        """
-        Called for every periodic Twilight presence announcement.
+    def twilight_state_update(self, data, sender):
+        """Handler for current state replication from Twilights."""
 
-        Remembers routing ID for that given Twilight instance and
-        starts fencing timer.
-        """
+        print 'twilight_state_update', data
 
-        # Check if we already know about the Twilight.
-        if msg['uuid'] not in self.hosts:
-            print 'twilight %s appeared' % msg['uuid']
+        # Update the model with changes from Twilight.
+        self.model.load(data['changes'])
 
-        # Make sure that the host exists and update route.
-        self.hosts.setdefault(msg['uuid'], {})
-        self.hosts[msg['uuid']]['route'] = sender
+        # Check incarnation. If we don't have it, we need a full resync.
+        if not self.model['host'].list(incarnation=data['incarnation']):
+            self.router.send({'event': 'sparkle-resync'}, sender)
 
 
     def _validate_path(self, path, keys):
@@ -255,8 +255,15 @@ class Manager(object):
 
 
     def apply_changes(self, changes):
-        """Applies changes to the model and forwards them to Twilights."""
+        """
+        Applies changes to the model and forwards them to Twilights.
+
+        Sparkle is not supposed to send current state,
+        so make sure you only update desired state through here.
+        """
         self.model.load(changes)
+
+        # TODO: Send to Twilights.
 
 
     @backtrace
@@ -366,7 +373,8 @@ class Manager(object):
             raise UserError('cannot create virtual entity')
 
         # Make sure we do not set uuid, database will generate one for us.
-        if 'uuid' in value:
+        # The only exception is the host table. Hosts have their own uuids.
+        if 'uuid' in value and table.name != 'host':
             del value['uuid']
 
         # Attempt creation of new entity.
