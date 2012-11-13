@@ -181,6 +181,12 @@ def make_sparkle_app(manager):
     def endpoints():
         return AUTOMAGIC_ENDPOINTS
 
+
+    # Debugging endpoint that dumps all data in the Sparkle model.
+    @app.route_json('/_dump')
+    def dump():
+        return call(manager.model.dump)
+
     # Ta-dah?
     return app
 # /def make_sparkle_app
