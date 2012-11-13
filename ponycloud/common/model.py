@@ -337,6 +337,7 @@ class CPUProfile(Table):
 class Disk(Table):
     name = 'disk'
     pkey = 'id'
+    indexes = ['raid']
     nm_indexes = {'host_disk': ('disk', 'host')}
 
 
