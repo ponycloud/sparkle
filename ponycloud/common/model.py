@@ -331,6 +331,7 @@ class ClusterInstance(Table):
 
 class CPUProfile(Table):
     name = 'cpu_profile'
+    nm_indexes = {'host_cpu_profile': ('cpu_profile', 'host')}
 
 
 class Disk(Table):
@@ -465,11 +466,17 @@ class HostInstance(Table):
     indexes = ['host', 'instance']
 
 
+class HostCPUProfile(Table):
+    virtual = True
+    name = 'host_cpu_profile'
+    indexes = ['host', 'cpu_profile']
+
+
 TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk,
           Extent, Host, Image, Instance, LogicalVolume, Member, Network,
           NIC, NICRole, Quota, RAID, Route, StoragePool, Switch, Tenant,
           TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,
-          HostInstance]
+          HostInstance, HostCPUProfile]
 
 
 # vim:set sw=4 ts=4 et:
