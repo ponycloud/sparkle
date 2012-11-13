@@ -29,6 +29,7 @@ class Manager(object):
         """
         self.sparkle = sparkle
         self.incarnation = uuidgen()
+        self.sequence = 1
 
         print 'connecting to libvirt'
         self.virt = Hypervisor()
@@ -36,10 +37,7 @@ class Manager(object):
 
         # Our primary configuration store.  Seed with our identity.
         self.model = Model()
-        self.model.load([('host', self.uuid, 'current', {
-            'uuid': self.uuid,
-            'incarnation': self.incarnation,
-        })])
+        self.model.load([('host', self.uuid, 'current', {'uuid': self.uuid})])
 
         print 'connecting to udev'
         self.udev = pyudev.Context()
@@ -53,12 +51,9 @@ class Manager(object):
         """Starts periodic tasks."""
         print 'starting manager'
 
-        # Perform full resync on startup.
-        self.sparkle_resync()
-
         # Send empty changes every 15 seconds to make sure Sparkle
         # knows about us.  If we do not do this, we risk being fenced.
-        task.LoopingCall(self.apply_changes, []).start(15.0, now=False)
+        task.LoopingCall(self.apply_changes, []).start(3.0)
 
 
     def sparkle_resync(self):
@@ -67,9 +62,11 @@ class Manager(object):
         self.sparkle.send({
             'uuid': self.uuid,
             'incarnation': self.incarnation,
+            'seq': 0,
             'event': 'twilight-state-update',
             'changes': self.model.dump(['current']),
         })
+        self.sequence = 1
 
 
     def apply_changes(self, changes):
@@ -83,9 +80,11 @@ class Manager(object):
         self.sparkle.send({
             'uuid': self.uuid,
             'incarnation': self.incarnation,
+            'seq': self.sequence,
             'event': 'twilight-state-update',
             'changes': changes,
         })
+        self.sequence += 1
 
 
     def on_udev_event(self, action, device):

@@ -137,6 +137,7 @@ class Manager(object):
         self.router = router
         self.incarnation = uuidgen()
         self.model = Model()
+        self.hosts = {}
 
 
     def start(self):
@@ -199,17 +200,42 @@ class Manager(object):
     # /def schedule_relate
 
 
-    def twilight_state_update(self, data, sender):
+    def twilight_state_update(self, uuid, incarnation, changes, seq, sender):
         """Handler for current state replication from Twilights."""
 
-        print 'twilight_state_update', data
+        # Update host record.
+        host = self.hosts.setdefault(uuid, {
+            'incarnation': None,
+            'objects': {},
+            'seq': 0
+        })
+        host['route'] = sender
+
+        if host['incarnation'] != incarnation or host['seq'] != seq:
+            for table, objects in host['objects'].iteritems():
+                for pkey in objects:
+                    self.model[table].update_row(pkey, 'current', None)
+
+            host['objects'] = {}
+
+            if seq > 0:
+                print 'requesting resync with twilight %s' % uuid
+                self.router.send({'event': 'sparkle-resync'}, sender)
+                host['incarnation'] = incarnation
+                host['seq'] = 0
+                return
 
         # Update the model with changes from Twilight.
-        self.model.load(data['changes'])
+        for table, pkey, state, part in changes:
+            if part is None:
+                host['objects'].setdefault(table, set()).discard(pkey)
+            else:
+                host['objects'].setdefault(table, set()).add(pkey)
 
-        # Check incarnation. If we don't have it, we need a full resync.
-        if not self.model['host'].list(incarnation=data['incarnation']):
-            self.router.send({'event': 'sparkle-resync'}, sender)
+            self.model[table].update_row(pkey, state, part)
+
+        # Bump the sequence.
+        host['seq'] += 1
 
 
     def _validate_path(self, path, keys):

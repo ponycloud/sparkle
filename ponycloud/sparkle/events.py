@@ -2,6 +2,7 @@
 
 __all__ = ['make_event_handler']
 
+
 def make_event_handler(manager):
     """
     Creates function that forwards relevant events to manager.
@@ -19,7 +20,8 @@ def make_event_handler(manager):
 
         # Drop host information for now.
         if data.get('event') == 'twilight-state-update':
-            return manager.twilight_state_update(data, sender)
+            del data['event']
+            return manager.twilight_state_update(sender=sender, **data)
 
         # Print unknown events.
         print 'event', data
