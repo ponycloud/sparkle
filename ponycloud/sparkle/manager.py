@@ -247,9 +247,10 @@ class Manager(object):
         the specified tenant and so on.
         """
 
-        for child in path[1:]:
-            if 0 == len(self.model[child].list(**keys)):
-                raise PathError('%s/%s not found' % (child, keys[child]))
+        for i in xrange(len(path)):
+            lst = self.model[path[i]].list(**{k: keys[k] for k in path[i - 1:i]})
+            if 0 == len(lst):
+                raise PathError('%s/%s not found' % (path[i], keys[path[i]]))
 
 
     def _get_changes(self):
@@ -302,7 +303,8 @@ class Manager(object):
         # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
         self._validate_path(path, keys)
-        state = [row.to_dict() for row in self.model[collection].list(**keys)]
+        rows = self.model[collection].list(**{k: keys[k] for k in path[-1:]})
+        state = [row.to_dict() for row in rows]
 
         # Return limited results, 100 per page.
         limited = state[page * 100 : (page + 1) * 100]
