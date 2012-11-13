@@ -8,6 +8,7 @@ import cjson
 from twisted.internet import reactor
 from twisted.internet.interfaces import IFileDescriptor, IReadDescriptor
 from zope.interface import implements
+from time import time
 
 from ponycloud.common.util import uuidgen
 
@@ -26,6 +27,10 @@ class Router(object):
         by sending messages to well-known participants.  Participants
         sending most messages to a single recipient can set it as default
         as ommit it's name when calling the send method.
+
+        Every message contains a timestamp that is checked by recipient.
+        If the time difference is larger than 15 seconds, message is dropped.
+        Make sure your machines use NTP to synchronize their clocks.
         """
         # Create the 0MQ socket.
         self.socket = zmq.Context.instance().socket(zmq.ROUTER)
@@ -57,7 +62,9 @@ class Router(object):
         if events & zmq.POLLIN:
             while True:
                 try:
-                    sender, data = self.socket.recv_multipart(zmq.NOBLOCK)
+                    sender, data, t = self.socket.recv_multipart(zmq.NOBLOCK)
+                    if int(t) + 15 < time():
+                        continue
                     self.on_message(cjson.decode(data), sender)
                 except zmq.ZMQError, e:
                     if e.errno == zmq.EAGAIN:
@@ -91,7 +98,7 @@ class Router(object):
             recipient = self.default_recipient
 
         # Send the message.
-        self.socket.send_multipart([recipient, cjson.encode(message)])
+        self.socket.send_multipart([recipient, cjson.encode(message), str(int(time()))])
 
         # Check for potential replies.
         # This is absolutely essential to do, because Twisted is going to
