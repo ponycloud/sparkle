@@ -219,19 +219,21 @@ class Manager(object):
         """Handler for current state replication from Twilights."""
 
         # Periodically notify new hosts.
-        loop = None
         if uuid not in self.hosts:
             print 'twilight %s appeared' % uuid
-            loop = task.LoopingCall(self.send_changes, uuid, []).start(15.0)
+            loop = task.LoopingCall(self.send_changes, uuid, [])
+            reactor.callLater(0, loop.start, 15.0)
+
+            self.hosts[uuid] = {
+                'incarnation': None,
+                'current': {},
+                'inseq': 0,
+                'outseq': 1,
+                'loop': loop,
+            }
 
         # Update host record.
-        host = self.hosts.setdefault(uuid, {
-            'incarnation': None,
-            'current': {},
-            'inseq': 0,
-            'outseq': 1,
-            'loop': loop,
-        })
+        host = self.hosts[uuid]
         host['route'] = sender
 
         if host['incarnation'] != incarnation or host['inseq'] != seq:
