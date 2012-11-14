@@ -294,7 +294,7 @@ class Manager(object):
 
 
     @backtrace
-    def list_collection(self, path, keys, page=0):
+    def list_collection(self, path, keys):
         """
         Called from API to obtain list of collection items.
         """
@@ -304,11 +304,7 @@ class Manager(object):
         path, collection = path[:-1], path[-1]
         self.validate_path(path, keys)
         rows = self.model[collection].list(**{k: keys[k] for k in path[-1:]})
-        state = [row.to_dict() for row in rows]
-
-        # Return limited results, 100 per page.
-        limited = state[page * 100 : (page + 1) * 100]
-        return {'total': len(state), 'items': limited}
+        return [row.to_dict() for row in rows]
 
 
     @backtrace

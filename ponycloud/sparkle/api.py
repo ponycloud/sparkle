@@ -118,8 +118,7 @@ def make_collection_handler(manager, path):
         keys.setdefault('tenant', None)
 
         if 'GET' == request.method:
-            page = int(request.args.get('page', 0))
-            return call(manager.list_collection, path, keys, page=page)
+            return call(manager.list_collection, path, keys)
         elif 'POST' == request.method:
             data = cjson.decode(request.data)
             return call(manager.create_entity, path, keys, data)
