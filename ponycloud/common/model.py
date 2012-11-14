@@ -450,6 +450,7 @@ class VNIC(Table):
 class Volume(Table):
     name = 'volume'
     indexes = ['tenant', 'storage_pool']
+    nm_indexes = {'host_volume': ('volume', 'host')}
 
 
 class HostDisk(Table):
@@ -472,11 +473,17 @@ class HostCPUProfile(Table):
     indexes = ['host', 'cpu_profile']
 
 
+class HostVolume(Table):
+    virtual = True
+    name = 'host_volume'
+    indexes = ['host', 'volume', 'type']
+
+
 TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk,
           Extent, Host, Image, Instance, LogicalVolume, Member, Network,
           NIC, NICRole, Quota, RAID, Route, StoragePool, Switch, Tenant,
           TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,
-          HostInstance, HostCPUProfile]
+          HostInstance, HostCPUProfile, HostVolume]
 
 
 # vim:set sw=4 ts=4 et:
