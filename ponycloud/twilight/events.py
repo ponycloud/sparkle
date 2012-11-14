@@ -15,6 +15,10 @@ def make_event_handler(manager):
         if data.get('event') == 'sparkle-resync':
             return manager.sparkle_resync()
 
+        if data.get('event') == 'sparkle-state-update':
+            del data['event']
+            return manager.sparkle_state_update(**data)
+
         # Print unknown events.
         print 'event', data
 

@@ -135,9 +135,23 @@ class Manager(object):
         """
         self.db = db
         self.router = router
-        self.incarnation = uuidgen()
+
+        # This is where we keep the configuration data.
         self.model = Model()
+
+        #
+        # In addition to the configuration, we keep some info about hosts.
+        # Specifically, their routing ids, sequence numbers, incarnation and
+        # most importantly, map of current states they provide plus a reverse
+        # map of desired state they are interested in.
+        #
+        self.incarnation = uuidgen()
         self.hosts = {}
+        self.host_to_row = {}
+        self.row_to_host = {}
+
+        # Install watches that manage row ownership for replication.
+        self.add_watches()
 
 
     def start(self):
@@ -194,6 +208,7 @@ class Manager(object):
             self.model = new_model
             self.model.load(old_model.dump(['current']))
             self.incarnation = uuidgen()
+            self.add_watches()
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
@@ -203,39 +218,47 @@ class Manager(object):
     def twilight_state_update(self, uuid, incarnation, changes, seq, sender):
         """Handler for current state replication from Twilights."""
 
+        # Periodically notify new hosts.
+        loop = None
+        if uuid not in self.hosts:
+            print 'twilight %s appeared' % uuid
+            loop = task.LoopingCall(self.send_changes, uuid, []).start(15.0)
+
         # Update host record.
         host = self.hosts.setdefault(uuid, {
             'incarnation': None,
-            'objects': {},
-            'seq': 0
+            'current': {},
+            'inseq': 0,
+            'outseq': 1,
+            'loop': loop,
         })
         host['route'] = sender
 
-        if host['incarnation'] != incarnation or host['seq'] != seq:
-            for table, objects in host['objects'].iteritems():
+        if host['incarnation'] != incarnation or host['inseq'] != seq:
+            for table, objects in host['current'].iteritems():
                 for pkey in objects:
                     self.model[table].update_row(pkey, 'current', None)
 
-            host['objects'] = {}
+            host['current'] = {}
 
             if seq > 0:
                 print 'requesting resync with twilight %s' % uuid
                 self.router.send({'event': 'sparkle-resync'}, sender)
                 host['incarnation'] = incarnation
-                host['seq'] = 0
+                host['inseq'] = 0
                 return
 
         # Update the model with changes from Twilight.
         for table, pkey, state, part in changes:
             if part is None:
-                host['objects'].setdefault(table, set()).discard(pkey)
+                host['current'].setdefault(table, set()).discard(pkey)
             else:
-                host['objects'].setdefault(table, set()).add(pkey)
+                host['current'].setdefault(table, set()).add(pkey)
 
             self.model[table].update_row(pkey, state, part)
 
         # Bump the sequence.
-        host['seq'] += 1
+        host['inseq'] += 1
 
 
     def validate_path(self, path, keys):
@@ -288,9 +311,84 @@ class Manager(object):
         Sparkle is not supposed to send current state,
         so make sure you only update desired state through here.
         """
+
+        # Apply the changes to the model.
         self.model.load(changes)
 
-        # TODO: Send to Twilights.
+        # Sort out which changes should go to which hosts.
+        hosts = {}
+        for change in changes:
+            for h in self.row_to_host.get(change[:2], []):
+                hosts.setdefault(h, []).append(change)
+
+        # Send the change bulks.
+        for host, ch in hosts.items():
+            self.send_changes(host, ch)
+
+
+    def send_changes(self, host, changes):
+        """Sends a bulk of changes to given host."""
+        # Get the routing key for the host. It is different from it's uuid.
+        if host not in self.hosts:
+            return
+
+        route = self.hosts[host]['route']
+
+        # Send a nice, warm message with all the goodies.
+        self.router.send({
+            'event': 'sparkle-state-update',
+            'incarnation': self.incarnation,
+            'seq': self.hosts[host]['outseq'],
+            'changes': changes,
+        }, route)
+        self.hosts[host]['outseq'] += 1
+
+
+    def twilight_resync(self, host, sender):
+        """Sends complete desired state for given Twilight."""
+        print 'sending complete desired state for %s' % host
+
+        changes = []
+        for name, pkey in self.host_to_row.get(host, []):
+            table = self.model[name]
+            changes.append((name, pkey, 'desired', table[pkey].desired))
+
+        self.router.send({
+            'incarnation': self.incarnation,
+            'seq': 0,
+            'event': 'sparkle-state-update',
+            'changes': changes,
+        }, sender)
+
+        if host in self.hosts:
+            self.hosts[host]['outseq'] = 1
+
+
+    def add_watches(self):
+        """Install event handlers that manage row ownership."""
+
+        def assign(table, row, host):
+            self.row_to_host.setdefault((table.name, row.pkey), set()).add(host)
+            self.host_to_row.setdefault(host, set()).add((table.name, row.pkey))
+
+        def after_host_update(table, row):
+            # Replicate host info to respective hosts.
+            assign(table, row, row.pkey)
+
+
+        def watch(table, handler):
+            @wraps(handler)
+            def wrapper(table, row):
+                host = self.row_to_host.pop((table.name, row.pkey), set([None])).pop()
+                self.host_to_row.get(host, set()).discard((table.name, row.pkey))
+                if row.desired is not None:
+                    handler(table, row)
+
+            table.on_after_row_update(wrapper)
+            for row in table.itervalues():
+                handler(table, row)
+
+        watch(self.model['host'], after_host_update)
 
 
     @backtrace

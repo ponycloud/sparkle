@@ -111,8 +111,8 @@ class Table(object):
                          for l, r in self.nm_indexes.values()}
 
         # Callbacks that subscribe to row events.
-        self.before_row_update_callbacks = set()
-        self.after_row_update_callbacks = set()
+        self.before_row_update_callbacks = []
+        self.after_row_update_callbacks = []
 
 
     @classmethod
@@ -135,12 +135,14 @@ class Table(object):
 
     def on_before_row_update(self, callback):
         """Register function to call before modifying a row."""
-        self.before_row_update_callbacks.add(callback)
+        if callback not in self.before_row_update_callbacks:
+            self.before_row_update_callbacks.append(callback)
 
 
     def on_after_row_update(self, callback):
         """Register function to call after a row is modified."""
-        self.after_row_update_callbacks.add(callback)
+        if callback not in self.after_row_update_callbacks:
+            self.after_row_update_callbacks.append(callback)
 
 
     def update_row(self, pkey, state, part):

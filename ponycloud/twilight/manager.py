@@ -29,7 +29,9 @@ class Manager(object):
         """
         self.sparkle = sparkle
         self.incarnation = uuidgen()
-        self.sequence = 1
+        self.sparkle_incarnation = None
+        self.outseq = 1
+        self.inseq = 0
 
         print 'connecting to libvirt'
         self.virt = Hypervisor()
@@ -53,7 +55,36 @@ class Manager(object):
 
         # Send empty changes every 15 seconds to make sure Sparkle
         # knows about us.  If we do not do this, we risk being fenced.
-        task.LoopingCall(self.apply_changes, []).start(3.0)
+        task.LoopingCall(self.apply_changes, []).start(15.0)
+
+
+    def sparkle_state_update(self, incarnation, changes, seq):
+        """Handler for desired state replication from Sparkle."""
+
+        # TODO: After each update trigger network, storage and libvirt
+        #       reconfiguration to take care of any changes.
+        #       These should be written to ensure proper state in the
+        #       least disruptive way.
+
+        if self.sparkle_incarnation != incarnation or self.inseq != seq:
+            if seq > 0:
+                print 'requesting resync with sparkle'
+                self.sparkle.send({'event': 'twilight-resync',
+                                   'uuid': self.uuid})
+                self.sparkle_incarnation = incarnation
+                self.inseq = 0
+
+            else:
+                print 'loading completely new desired state'
+                new_model = Model()
+                new_model.load(changes)
+                new_model.load(self.model.dump('current'))
+                self.model = new_model
+
+            return
+
+        self.model.load(changes)
+        self.inseq += 1
 
 
     def sparkle_resync(self):
@@ -66,7 +97,7 @@ class Manager(object):
             'event': 'twilight-state-update',
             'changes': self.model.dump(['current']),
         })
-        self.sequence = 1
+        self.outseq = 1
 
 
     def apply_changes(self, changes):
@@ -80,11 +111,11 @@ class Manager(object):
         self.sparkle.send({
             'uuid': self.uuid,
             'incarnation': self.incarnation,
-            'seq': self.sequence,
+            'seq': self.outseq,
             'event': 'twilight-state-update',
             'changes': changes,
         })
-        self.sequence += 1
+        self.outseq += 1
 
 
     def on_udev_event(self, action, device):

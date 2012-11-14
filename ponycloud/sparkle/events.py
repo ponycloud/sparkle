@@ -18,7 +18,9 @@ def make_event_handler(manager):
             print 'bogus event', data
             return
 
-        # Drop host information for now.
+        if data.get('event') == 'twilight-resync':
+            return manager.twilight_resync(data['uuid'], sender)
+
         if data.get('event') == 'twilight-state-update':
             del data['event']
             return manager.twilight_state_update(sender=sender, **data)
