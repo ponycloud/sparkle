@@ -238,7 +238,7 @@ class Manager(object):
         host['seq'] += 1
 
 
-    def _validate_path(self, path, keys):
+    def validate_path(self, path, keys):
         """
         Validates entity path.
 
@@ -253,7 +253,7 @@ class Manager(object):
                 raise PathError('%s/%s not found' % (path[i], keys[path[i]]))
 
 
-    def _get_changes(self):
+    def get_changes(self):
         """
         Returns changes in current transaction and flushes the changelog.
         """
@@ -302,7 +302,7 @@ class Manager(object):
         # Get the leading path plus name of the collection, validate the
         # path for access control to work and fetch the collection.
         path, collection = path[:-1], path[-1]
-        self._validate_path(path, keys)
+        self.validate_path(path, keys)
         rows = self.model[collection].list(**{k: keys[k] for k in path[-1:]})
         state = [row.to_dict() for row in rows]
 
@@ -318,7 +318,7 @@ class Manager(object):
         """
 
         # Validate path leading to the entity for access control.
-        self._validate_path(path, keys)
+        self.validate_path(path, keys)
 
         try:
             name = path[-1]
@@ -338,7 +338,7 @@ class Manager(object):
         # This is essential in order to enforce access control, because
         # the updated entity will not be allowed to reference any other
         # parent.
-        self._validate_path(path, keys)
+        self.validate_path(path, keys)
 
         # Make sure the value is valid and references correct parent.
         check_and_fix_parent(path, keys, value)
@@ -363,7 +363,7 @@ class Manager(object):
                 setattr(obj, c.name, value[c.name])
 
         # Get data from the changelog.
-        changes = self._get_changes()
+        changes = self.get_changes()
 
         # Attempt to commit the transaction.
         # This is where consistency is checked on the database side.
@@ -386,7 +386,7 @@ class Manager(object):
         # TODO: Add recursion support using DB relates.
 
         # Validate entity path.
-        self._validate_path(path[:-1], keys)
+        self.validate_path(path[:-1], keys)
 
         # Make sure the value is valid and references correct parent.
         check_and_fix_parent(path, keys, value)
@@ -409,7 +409,7 @@ class Manager(object):
         entity.insert(**value)
 
         # Get data from the changelog.
-        changes = self._get_changes()
+        changes = self.get_changes()
 
         # Attempt to commit the transaction.
         # This is where consistency is checked on the database side.
@@ -436,7 +436,7 @@ class Manager(object):
         """
 
         # Validate entity path.
-        self._validate_path(path, keys)
+        self.validate_path(path, keys)
 
         # Get info about the entity.
         name = path[-1]
@@ -452,7 +452,7 @@ class Manager(object):
                 .delete(synchronize_session=False)
 
         # Get data from the changelog.
-        changes = self._get_changes()
+        changes = self.get_changes()
 
         # Attempt to commit the transaction.
         # This is where consistency is checked on the database side.
