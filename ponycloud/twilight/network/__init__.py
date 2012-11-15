@@ -194,7 +194,7 @@ class Networking(object):
         return out
 
 
-    def configure(recipe):
+    def configure(self, recipe):
         """
         Configure the self according to recipe.
         """
@@ -234,7 +234,7 @@ class Networking(object):
         return
 
 
-    def unconfigure(recipe):
+    def unconfigure(self, recipe):
         """
         Undo all changes done by calling configure with given recipe
         """
