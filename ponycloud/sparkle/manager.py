@@ -374,8 +374,14 @@ class Manager(object):
             self.host_to_row.setdefault(host, set()).add((table.name, row.pkey))
 
         def after_host_update(table, row):
-            # Replicate host info to respective hosts.
             assign(table, row, row.pkey)
+
+        def after_host_owned_row_update(table, row):
+            assign(table, row, row.desired['host'])
+
+        def after_nic_role_update(table, row):
+            bond = self.model['bond'][row.desired['bond']]
+            assign(table, row, bond.desired['host'])
 
 
         def watch(table, handler):
@@ -391,6 +397,9 @@ class Manager(object):
                 handler(table, row)
 
         watch(self.model['host'], after_host_update)
+        watch(self.model['bond'], after_host_owned_row_update)
+        watch(self.model['nic'], after_host_owned_row_update)
+        watch(self.model['nic_role'], after_nic_role_update)
 
 
     @backtrace
