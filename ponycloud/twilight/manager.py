@@ -73,15 +73,13 @@ class Manager(object):
                                    'uuid': self.uuid})
                 self.sparkle_incarnation = incarnation
                 self.inseq = 0
+                return
 
-            else:
-                print 'loading completely new desired state'
-                new_model = Model()
-                new_model.load(changes)
-                new_model.load(self.model.dump('current'))
-                self.model = new_model
-
-            return
+        if seq == 0:
+            print 'loading completely new desired state'
+            new_model = Model()
+            new_model.load(self.model.dump(['current']))
+            self.model = new_model
 
         self.model.load(changes)
         self.inseq += 1
