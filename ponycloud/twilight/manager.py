@@ -45,7 +45,7 @@ class Manager(object):
         self.udev = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(self.udev)
         self.observer = pyudev.MonitorObserver(self.monitor, \
-                                               from_thread(self.on_udev_event))
+                                               from_thread(self.udev_event))
         self.observer.start()
 
 
@@ -116,7 +116,7 @@ class Manager(object):
         self.outseq += 1
 
 
-    def on_udev_event(self, action, device):
+    def udev_event(self, action, device):
         """Handler of background udev notifications."""
         if device.subsystem not in ('net', 'block'):
             return
