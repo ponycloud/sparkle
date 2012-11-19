@@ -84,6 +84,7 @@ class ModelManager(object):
             'event': 'twilight-state-update',
             'changes': changes,
         })
+        self.outseq += 1
 
 
     def watch_model(self):

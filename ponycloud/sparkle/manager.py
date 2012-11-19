@@ -259,7 +259,8 @@ class Manager(object):
 
             self.model[table].update_row(pkey, state, part)
 
-        # Bump the sequence.
+        # Bump the sequence and save current incarnation of the peer.
+        host['incarnation'] = incarnation
         host['inseq'] += 1
 
 
