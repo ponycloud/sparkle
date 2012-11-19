@@ -48,6 +48,10 @@ p {
 	text-indent: 0.5em;
 }
 
+blockquote {
+	font-style: italic;
+}
+
 li {
 	line-height: 1.35;
 	padding-left: 0.5em;

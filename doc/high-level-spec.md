@@ -1,10 +1,6 @@
-% High Level Design Specification
+% High Level Specification
 
-# Scope
-
-TODO
-
-# Features
+# Project Features
 
  *  Installation instructions fit on a single page.
 
@@ -189,12 +185,6 @@ ease of configuration and low system requirements.
 
 Zabbix is an enterprise-class open source distributed monitoring solution
 for networks and applications.
-
-TODO
-
-# Architecture
-
-TODO
 
 
 [PostgreSQL]: http://www.postgresql.org/
