@@ -112,16 +112,26 @@ class Table(dict):
             model[table].on_after_row_update(self.nm_index_row)
 
 
-    def on_before_row_update(self, callback):
+    def on_before_row_update(self, callback, states=['desired', 'current']):
         """Register function to call before modifying a row."""
-        if callback not in self.before_row_update_callbacks:
-            self.before_row_update_callbacks.append(callback)
+        for rec in self.before_row_update_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.before_row_update_callbacks.append({'callback': callback,
+                                                 'states': states})
 
 
-    def on_after_row_update(self, callback):
+    def on_after_row_update(self, callback, states=['desired', 'current']):
         """Register function to call after a row is modified."""
-        if callback not in self.after_row_update_callbacks:
-            self.after_row_update_callbacks.append(callback)
+        for rec in self.after_row_update_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.after_row_update_callbacks.append({'callback': callback,
+                                                 'states': states})
 
 
     def update_row(self, pkey, state, part):
@@ -142,8 +152,9 @@ class Table(dict):
             self[pkey] = row = Row(pkey)
 
         # Fire callbacks to inform subscribers that the row will change.
-        for callback in self.before_row_update_callbacks:
-            callback(self, row)
+        for rec in self.before_row_update_callbacks:
+            if state in rec['states']:
+                rec['callback'](self, row)
 
         if part is None:
             # Remove the corresponding row part.
@@ -163,8 +174,9 @@ class Table(dict):
             row.index(self)
 
         # Fire callbacks to inform subscribers that now row is in place.
-        for callback in self.after_row_update_callbacks:
-            callback(self, row)
+        for rec in self.after_row_update_callbacks:
+            if state in rec['states']:
+                rec['callback'](self, row)
 
 
     def nm_unindex_row(self, table, row):

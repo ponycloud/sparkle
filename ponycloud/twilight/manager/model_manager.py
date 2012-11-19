@@ -122,17 +122,17 @@ class ModelManager(object):
             if row.desired is not None and row.get('bridge_name') is not None:
                 self.bridge_event('configure', row)
 
-        self.model['nic'].on_before_row_update(before_nic_update)
-        self.model['nic'].on_after_row_update(after_nic_update)
+        self.model['nic'].on_before_row_update(before_nic_update, ['desired'])
+        self.model['nic'].on_after_row_update(after_nic_update, ['desired'])
 
-        self.model['bond'].on_before_row_update(before_bond_update)
-        self.model['bond'].on_after_row_update(after_bond_update)
+        self.model['bond'].on_before_row_update(before_bond_update, ['desired'])
+        self.model['bond'].on_after_row_update(after_bond_update, ['desired'])
 
-        self.model['nic_role'].on_before_row_update(before_bridge_update)
-        self.model['nic_role'].on_before_row_update(before_vlan_update)
+        self.model['nic_role'].on_before_row_update(before_bridge_update, ['desired'])
+        self.model['nic_role'].on_before_row_update(before_vlan_update, ['desired'])
 
-        self.model['nic_role'].on_after_row_update(after_vlan_update)
-        self.model['nic_role'].on_after_row_update(after_bridge_update)
+        self.model['nic_role'].on_after_row_update(after_vlan_update, ['desired'])
+        self.model['nic_role'].on_after_row_update(after_bridge_update, ['desired'])
     # /def watch_model
 
 # /class ModelManager
