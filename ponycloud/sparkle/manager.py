@@ -248,7 +248,6 @@ class Manager(object):
                 self.router.send({'event': 'sparkle-resync'}, sender)
                 host['incarnation'] = incarnation
                 host['inseq'] = 0
-                self.send_changes(uuid, [])
                 return
 
         # Update the model with changes from Twilight.
