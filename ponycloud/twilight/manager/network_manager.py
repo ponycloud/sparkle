@@ -43,7 +43,14 @@ class NetworkManager(object):
 
 
     def create_bond(self, uuid):
-        """Make sure bond with given uuid exists."""
+        """
+        Make sure bond with given uuid exists.
+
+        Returns True if newly created, False if it already existed.
+        The newly created bond name is added to the current state of
+        row matching the passed uuid (which should be valid bond pkey,
+        by the way).
+        """
 
         if self.model['bond'][uuid].get('bond_name') is not None:
             # According to current state the bond already exists.
@@ -51,7 +58,7 @@ class NetworkManager(object):
 
         # We don't have interface for this row, create one.
         # No need to configure it right now, we'll get notified later.
-        print 'create bond pc-bond%i' % self.bondseq
+        print 'creating bond pc-bond%i' % self.bondseq
         bond = Bond.create('pc-bond%i' % self.bondseq)
         self.bondseq += 1
 
@@ -64,7 +71,9 @@ class NetworkManager(object):
 
 
     def configure_bond(self, row):
-        """Configures an existing bond interface to match desired state."""
+        """Configure an existing bond interface to match desired state."""
+
+        print 'configuring bond %s' % row['bond_name']
 
         # Get the configuration proxy object.
         bond = self.networking[row['bond_name']]
@@ -76,7 +85,6 @@ class NetworkManager(object):
         for k, v in row.desired.items():
             if k in ('mode', 'lacp_rate', 'xmit_hash_policy'):
                 if v is not None:
-                    print 'setting %s.%s = %s' % (bond.name, k, v)
                     setattr(bond, k, v)
 
         # Bring it back up once everything is set.
@@ -84,7 +92,13 @@ class NetworkManager(object):
 
 
     def enslave_bond_interfaces(self, row):
-        """Enslaves present interfaces that are to be enslaved by this bond."""
+        """
+        Enslave present interfaces.
+
+        All interfaces that refer to this bond in their desired state and
+        are present in the system (meaning they have assigned nic_name in
+        the current state) are enslaved to bond specified by given row.
+        """
 
         # Get the configuration proxy object.
         bond = self.networking[row['bond_name']]
@@ -94,13 +108,13 @@ class NetworkManager(object):
             slave_iface = slave.get('nic_name')
             if slave_iface is not None:
                 if slave_iface not in bond.slaves:
-                    print 'enslave %s %s' % (bond.name, slave_iface)
+                    print 'enslaving %s to bond %s' % (slave_iface, bond.name)
                     self.networking[slave_iface].state = 'down'
                     bond.slave_add(slave_iface)
 
 
     def nic_event(self, action, row):
-        print 'nic event', action, row.pkey
+        """Sink for physical interface events."""
 
         if action == 'add':
             if row.desired['bond'] is not None:
@@ -118,7 +132,7 @@ class NetworkManager(object):
 
 
     def bond_event(self, action, row):
-        print 'bond event', action, row.pkey
+        """Sink for bond interface events."""
 
         # Get the network interface for configuration.
         bond = self.networking.get(row['bond_name'])
@@ -128,8 +142,7 @@ class NetworkManager(object):
 
         if action in ('add', 'enslave'):
             self.enslave_bond_interfaces(row)
-
-        if action == 'remove':
+        elif action == 'remove':
             # Forget the bond interface.
             self.model['bond'].update_row(row.pkey, 'current', {
                 'bond_name': None,
@@ -137,10 +150,12 @@ class NetworkManager(object):
 
 
     def vlan_event(self, action, row):
+        """Sink for nic_role/vlan events."""
         print 'vlan event', action, row.pkey
 
 
     def bridge_event(self, action, row):
+        """Sink for nic_role/bridge events."""
         print 'bridge event', action, row.pkey
 
 
