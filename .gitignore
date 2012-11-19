@@ -4,6 +4,7 @@
 /dist/
 /*.egg*/
 *~
+/*.html
 /doc/*.html
 /doc/*.png
 /doc/*/*.html
