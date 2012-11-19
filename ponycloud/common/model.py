@@ -2,7 +2,7 @@
 
 __all__ = ['Model']
 
-class Model(object):
+class Model(dict):
     """
     PonyCloud Data Model
 
@@ -17,31 +17,11 @@ class Model(object):
         """Constructs the model."""
 
         # Prepare all model tables.
-        self.tables = {t.name: t() for t in TABLES}
+        self.update({t.name: t() for t in TABLES})
 
         # Let tables watch other tables for some relations to work.
-        for table in self.tables.values():
+        for table in self.values():
             table.add_watches(self)
-
-
-    def __getitem__(self, name):
-        """Retrieves table by it's name."""
-        return self.tables[name]
-
-
-    def __iter__(self):
-        """Iterates over table names."""
-        return iter(self.tables)
-
-
-    def __contains__(self, name):
-        """Returns True if table exists."""
-        return name in self.tables
-
-
-    def items(self):
-        """Returns `(name, table)' tuples."""
-        return self.tables.items()
 
 
     def dump(self, states=['desired', 'current']):
@@ -53,7 +33,7 @@ class Model(object):
         """
         out = []
 
-        for name, table in self.tables.items():
+        for name, table in self.iteritems():
             for row in table.itervalues():
                 for state in states:
                     if getattr(row, state) is not None:
@@ -65,11 +45,11 @@ class Model(object):
     def load(self, data):
         """Load previously dumped data."""
         for name, pkey, state, part in data:
-            self.tables[name].update_row(pkey, state, part)
+            self[name].update_row(pkey, state, part)
 # /class Model
 
 
-class Table(object):
+class Table(dict):
     """
     Data Model Table
 
@@ -104,7 +84,6 @@ class Table(object):
         """Prepare internal data structures of the table."""
 
         # Start with empty indexes.
-        self.rows = {}
         self.index = {i: {'desired': {}, 'current': {}} \
                       for i in self.indexes}
         self.nm_index = {r: {'desired': {}, 'current': {}} \
@@ -154,13 +133,13 @@ class Table(object):
         removed and if the row have no states, it is deleted completely.
         """
 
-        if pkey in self.rows:
+        if pkey in self:
             # Row already exists, unindex it so that it can be modified.
-            row = self.rows[pkey]
+            row = self[pkey]
             row.unindex(self)
         else:
             # Create new row object and add it to the table.
-            self.rows[pkey] = row = Row(pkey)
+            self[pkey] = row = Row(pkey)
 
         # Fire callbacks to inform subscribers that the row will change.
         for callback in self.before_row_update_callbacks:
@@ -178,7 +157,7 @@ class Table(object):
 
         if row.desired is None and row.current is None:
             # Delete the row completely.
-            del self.rows[pkey]
+            del self[pkey]
         else:
             # Index the updated row.
             row.index(self)
@@ -213,26 +192,6 @@ class Table(object):
                 self.nm_index[remote][state][part[remote]].add(part[local])
 
 
-    def __getitem__(self, pkey):
-        """Retrieves row by it's primary key."""
-        return self.rows[pkey]
-
-
-    def __contains__(self, pkey):
-        """Returns True if a row with given primary key exists."""
-        return pkey in self.rows
-
-
-    def __iter__(self):
-        """Iterates over all primary keys."""
-        return self.rows.iterkeys()
-
-
-    def itervalues(self):
-        """Iterates over all rows."""
-        return self.rows.itervalues()
-
-
     def list(self, **keys):
         """Return rows with indexed columns matching given keys."""
 
@@ -256,8 +215,21 @@ class Table(object):
                 selection.intersection_update(subselection)
 
         if selection is None:
-            return self.rows.values()
-        return [self.rows[k] for k in selection]
+            return self.values()
+        return [self[k] for k in selection]
+
+
+    def one(self, default=None, **keys):
+        """
+        Same as list(), but returns just one item.
+
+        If the item is not found, or there are multiple such items,
+        returns None or other configured default value.
+        """
+        items = self.list(**keys)
+        if len(items) != 1:
+            return default
+        return items[0]
 # /class Table
 
 
