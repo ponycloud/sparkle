@@ -11,7 +11,8 @@ TODO
 ## Networking
 
  *  Traditional flat networks without separation.
- *  Arbitrary number of virtual networks private to tenants.
+ *  Arbitrary number of virtual networks private to tenants,
+    some shared between multiple tenants as needed.
 
 ## Storage
 
@@ -56,7 +57,7 @@ of the Sparkle service.
 ## Luna
 
 Manages provisioning of physical machines.  It is basically a high-level
-cobbler interface combined with fencing agent.
+dnsmasq interface combined with fencing agent.
 
 ### Features
 
@@ -66,8 +67,7 @@ cobbler interface combined with fencing agent.
 ## Sparkle
 
 Holds the central database with configuration of physical machines, networks,
-storage, virtual machines and identities.  It does not directly _tell_ any
-other component what to do, instead it publishes proposals and gathers results.
+storage, virtual machines and identities.
 
 ### Features
 
@@ -76,9 +76,9 @@ other component what to do, instead it publishes proposals and gathers results.
     current state and event notifications.
  *  Provides public RESTful API to the full functionality of the platform.
  *  Performs authentication, authorization and accounting.
- *  Initiates and arbitrates instance placement, host evacuation, fencing
-    and relocation of instances during host outage and other aspects of
-    central orchestration.
+ *  Computes instance placement, controls host evacuation, fencing and
+    relocation of instances during host outage and takes care of other
+    aspects of central orchestration.
  *  During normal operation keeps all persistent data safe in a database.
 
 ## Twilight
@@ -95,7 +95,6 @@ behave as specified by Sparkle.
  *  Performs no action on it's own, always merely applicates desired state.
  *  Holds a copy of bootstrap configuration that is used during controller
     startup.
- *  Participates in the placement algorithm and distributed load leveling.
  *  Provides `cloud-init` service to instances it hosts.
  *  Informs Sparkle about interesting conditions using notifications.
  *  Collects performance data and sends them to a central service.
@@ -115,7 +114,7 @@ service instances, that are treated specially.  These can be, for example:
 ## [KVM][]
 
 Full-featured hypervisor for Intel and ARM. Lately backed up by Red Hat
-and other large vendors from the [Open Virtualization Alliance].
+and other large vendors from the [Open Virtualization Alliance][].
 
 ## [libvirt][]
 
@@ -165,7 +164,7 @@ and very rich feature set including support for JSON.
 
 ## [Twitter Bootstrap][]
 
-Twitter Bootstrap is a CSS/JavaScript/HTML toolkit for rapid UI prototyping 
+Twitter Bootstrap is a CSS/JavaScript/HTML toolkit for rapid UI prototyping
 and design. It has been chosen because of it's simplicity, ease of use and
 versatility.
 
@@ -188,7 +187,7 @@ ease of configuration and low system requirements.
 
 ## [Zabbix][]
 
-Zabbix is an enterprise-class open source distributed monitoring solution 
+Zabbix is an enterprise-class open source distributed monitoring solution
 for networks and applications.
 
 TODO
@@ -215,4 +214,4 @@ TODO
 [ZeroMQ]:     http://www.zeromq.org/
 [Twisted]:    http://twistedmatrix.com/
 [Flask]:      http://flask.pocoo.org/
-
+[Open Virtualization Alliance]: http://openvirtualizationalliance.org/
