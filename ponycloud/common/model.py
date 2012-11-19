@@ -257,6 +257,14 @@ class Row(object):
         raise KeyError('key %s not found in either state' % key)
 
 
+    def get(self, key, default=None):
+        """Same as __getitem__(), but returns default instead of failing."""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
     def index(self, table):
         """Index the row into the table's indexes."""
         for state in ('desired', 'current'):
@@ -290,7 +298,7 @@ class Address(Table):
 
 class Bond(Table):
     name = 'bond'
-    indexes = ['host']
+    indexes = ['host', 'bond_name']
 
 
 class Cluster(Table):
@@ -356,12 +364,12 @@ class Network(Table):
 class NIC(Table):
     name = 'nic'
     pkey = 'hwaddr'
-    indexes = ['bond']
+    indexes = ['bond', 'nic_name']
 
 
 class NICRole(Table):
     name = 'nic_role'
-    indexes = ['bond']
+    indexes = ['bond', 'vlan_name', 'bridge_name']
 
 
 class Quota(Table):

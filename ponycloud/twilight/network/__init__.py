@@ -1,6 +1,6 @@
 #!/usr/bin/python -tt
 
-__all__ = ['Networking']
+__all__ = ['Networking', 'Bridge', 'Bond', 'VLAN', 'VXLAN', 'Physical']
 
 from bond import *
 from bridge import *
@@ -29,6 +29,15 @@ class Networking(object):
                             if isinstance(sys['class']['net'][ifname], Node)])
 
 
+    def find_physical_by_mac(self, mac):
+        """Returns physical interface with specified MAC address."""
+        for dev in self:
+            if isinstance(dev, Physical):
+                if dev.hwaddr == mac:
+                    return dev
+        return None
+
+
     def __getitem__(self, name):
         """Retrieves interface proxy object, guessing interface type."""
 
@@ -47,10 +56,21 @@ class Networking(object):
         if 'DEVTYPE=vxlan' in sys['class']['net'][name]['uevent']:
             return VXLAN(name)
 
-        if proc['net']['vlan'][name]:
+        if proc['net']['vlan'] and proc['net']['vlan'][name]:
             return VLAN(name)
 
+        if name.startswith('dummy'):
+            return Physical(name)
+
         return Interface(name)
+
+
+    def get(self, name, default=None):
+        """Return the interface if it exists, default otherwise."""
+        try:
+            return self[name]
+        except KeyError:
+            return default
 
 
     def create_recipe(self, configuration):
