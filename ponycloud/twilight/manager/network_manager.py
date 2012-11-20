@@ -20,10 +20,9 @@ class NetworkManager(object):
         if action == 'add':
             iface = self.networking[ifname]
             if isinstance(iface, Physical):
-                if iface.hwaddr in self.model['nic']:
-                    self.model['nic'].update_row(iface.hwaddr, 'current', {
-                        'nic_name': ifname,
-                    })
+                self.apply_changes([('nic', iface.hwaddr, 'current', {
+                    'nic_name': ifname,
+                })])
 
         row = self.model['nic'].one(nic_name=ifname)
         if row is not None:
@@ -42,9 +41,9 @@ class NetworkManager(object):
             return self.bridge_event(action, row)
 
 
-    def create_bond(self, uuid):
+    def create_bond(self, row):
         """
-        Make sure bond with given uuid exists.
+        Make sure specifid bond exists.
 
         Returns True if newly created, False if it already existed.
         The newly created bond name is added to the current state of
@@ -52,7 +51,7 @@ class NetworkManager(object):
         by the way).
         """
 
-        if self.model['bond'][uuid].get('bond_name') is not None:
+        if row.get('bond_name') is not None:
             # According to current state the bond already exists.
             return False
 
@@ -63,100 +62,144 @@ class NetworkManager(object):
         self.bondseq += 1
 
         # And remember it was for this row.
-        self.model['bond'].update_row(uuid, 'current', {
+        self.apply_changes([('bond', row.pkey, 'current', {
             'bond_name': bond.name,
-        })
+            'bond_configured': False,
+        })])
 
         return True
 
 
     def configure_bond(self, row):
-        """Configure an existing bond interface to match desired state."""
+        """Apply bond configuration, such as mode."""
 
-        print 'configuring bond %s' % row['bond_name']
-
-        # Get the configuration proxy object.
+        # Get the configuration proxy.
         bond = self.networking[row['bond_name']]
 
-        # Bring the interface down in order to configure it.
+        # Bring the bond down to configure it.
         bond.state = 'down'
 
-        # Configure the bond interface according to the desired state.
-        for k, v in row.desired.items():
-            if k in ('mode', 'lacp_rate', 'xmit_hash_policy'):
-                if v is not None:
-                    setattr(bond, k, v)
+        # Set various bond flags.
+        for k in ('mode', 'lacp_rate', 'xmit_hash_policy'):
+            if row.get(k) is not None:
+                print '  * %s.%s = %s' % (bond.name, k, row[k])
+                setattr(bond, k, row[k])
 
-        # Bring it back up once everything is set.
+        # Bring the bond back up to be able to enslave interfaces to it.
         bond.state = 'up'
 
+        # It is configured now.
+        self.apply_changes([('bond', row.pkey, 'current', {
+            'bond_configured': True,
+        })])
 
-    def enslave_bond_interfaces(self, row):
+
+    def remove_bond(self, row):
+        """Remove the bond interface."""
+
+        if row.get('bond_name') is not None:
+            print 'destroy bond %s' % row['bond_name']
+            self.networking[row['bond_name']].destroy()
+
+        # And remember it is no longer there.
+        self.apply_changes([('bond', row.pkey, 'current', {
+            'bond_name': None,
+            'bond_configured': False,
+        })])
+
+
+    def enslave(self, row):
         """
-        Enslave present interfaces.
+        Enslave NIC to it's bond.
 
-        All interfaces that refer to this bond in their desired state and
-        are present in the system (meaning they have assigned nic_name in
-        the current state) are enslaved to bond specified by given row.
+        If the bond does not exist or is not yet fully configured,
+        do not try to do anything.
         """
 
-        # Get the configuration proxy object.
-        bond = self.networking[row['bond_name']]
+        if row.get('nic_name') is not None and row.get('bond') is not None:
+            bond_row = self.model['bond'][row['bond']]
 
-        # Add missing slaves.
-        for slave in self.model['nic'].list(bond=row.pkey):
-            slave_iface = slave.get('nic_name')
-            if slave_iface is not None:
-                if slave_iface not in bond.slaves:
-                    print 'enslaving %s to bond %s' % (slave_iface, bond.name)
-                    self.networking[slave_iface].state = 'down'
-                    bond.slave_add(slave_iface)
+            if not bond_row.get('bond_configured'):
+                # Do not enslave if the bond is not yet configured.
+                return
+
+            if bond_row.get('bond_name') is not None:
+                iface = self.networking[row['nic_name']]
+                bond = self.networking[bond_row['bond_name']]
+
+                if iface.name not in bond.slaves:
+                    print 'enslaving %s to %s' % (iface.name, bond.name)
+                    iface.state = 'down'
+                    bond.slave_add(iface.name)
+
+
+    def unenslave(self, row):
+        """Un-enslaves nic from it's configured bond."""
+
+        if row.get('nic_name') is not None and row.get('bond') is not None:
+            bond_row = self.model['bond'][row['bond']]
+            if bond_row.get('bond_name') is not None:
+                bond = self.networking[bond_row['bond_name']]
+                if row['nic_name'] in bond.slaves:
+                    print 'un-enslaving %s from %s' \
+                            % (row['nic_name'], bond.name)
+                    bond.slave_del(row['nic_name'])
 
 
     def nic_event(self, action, row):
         """Sink for physical interface events."""
 
-        if action == 'add':
-            if row.desired['bond'] is not None:
-                # Create the bond.
-                if not self.create_bond(row.desired['bond']):
-                    # It was already there, do just the enslavement.
-                    bond_row = self.model['bond'][row.desired['bond']]
-                    self.bond_event('enslave', bond_row)
+        print '>>> nic event', action, row.pkey
+
+        if action in ('add', 'configure'):
+            if row.get('bond') is not None:
+                bond_row = self.model['bond'][row['bond']]
+                if not self.create_bond(bond_row):
+                    self.enslave(row)
 
         elif action == 'remove':
-            # Forget about the interface.
-            self.model['nic'].update_row(row.pkey, 'current', {
+            self.apply_changes([('nic', row.pkey, 'current', {
                 'nic_name': None,
-            })
+            })])
+
+        elif action == 'deconfigure':
+            self.unenslave(row)
 
 
     def bond_event(self, action, row):
         """Sink for bond interface events."""
 
-        # Get the network interface for configuration.
-        bond = self.networking.get(row['bond_name'])
+        print '>>> bond event', action, row.pkey
 
         if action == 'add':
+            # Apply bond configuration.
             self.configure_bond(row)
 
-        if action in ('add', 'enslave'):
-            self.enslave_bond_interfaces(row)
+            # Enslave it's interfaces.
+            for nic in self.model['nic'].list(bond=row.pkey):
+                self.enslave(nic)
+
+        elif action == 'configure':
+            self.create_bond(row)
+
         elif action == 'remove':
-            # Forget the bond interface.
-            self.model['bond'].update_row(row.pkey, 'current', {
+            self.apply_changes([('bond', row.pkey, 'current', {
                 'bond_name': None,
-            })
+                'bond_configured': False,
+            })])
+
+        elif action == 'deconfigure':
+            self.remove_bond(row)
 
 
     def vlan_event(self, action, row):
         """Sink for nic_role/vlan events."""
-        print 'vlan event', action, row.pkey
+        print '>>> vlan event', action, row.pkey
 
 
     def bridge_event(self, action, row):
         """Sink for nic_role/bridge events."""
-        print 'bridge event', action, row.pkey
+        print '>>> bridge event', action, row.pkey
 
 
 # vim:set sw=4 ts=4 et:

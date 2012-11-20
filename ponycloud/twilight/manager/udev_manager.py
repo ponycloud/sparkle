@@ -17,6 +17,17 @@ class UdevManager(object):
         self.observer = MonitorObserver(self.monitor, from_thread(self.udev_event))
         self.observer.start()
 
+        # Trigger missed events.
+        reactor.callLater(0, self.raise_missed_udev_events)
+
+
+    def raise_missed_udev_events(self):
+        """Raise 'add' event for all 'net' and 'block' devices."""
+
+        for subsystem in ('net', 'block'):
+            for device in self.udev.list_devices(subsystem=subsystem):
+                self.udev_event('add', device)
+
 
     def udev_event(self, action, device):
         """Handler for udev notifications."""

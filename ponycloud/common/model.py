@@ -187,9 +187,10 @@ class Table(dict):
         for state in ('desired', 'current'):
             part = getattr(row, state)
             if part is not None and remote in part and local in part:
-                self.nm_index[remote][state][part[remote]].remove(part[local])
-                if 0 == len(self.nm_index[remote][state][part[remote]]):
-                    del self.nm_index[remote][state][part[remote]]
+                if part[remote] in table.nm_index[remote][state]:
+                    self.nm_index[remote][state][part[remote]].remove(part[local])
+                    if 0 == len(self.nm_index[remote][state][part[remote]]):
+                        del self.nm_index[remote][state][part[remote]]
 
 
     def nm_index_row(self, table, row):
@@ -293,9 +294,10 @@ class Row(object):
             for idx in table.indexes:
                 part = getattr(self, state)
                 if part is not None and idx in part:
-                    table.index[idx][state][part[idx]].remove(self.pkey)
-                    if 0 == len(table.index[idx][state][part[idx]]):
-                        del table.index[idx][state][part[idx]]
+                    if part[idx] in table.index[idx][state]:
+                        table.index[idx][state][part[idx]].remove(self.pkey)
+                        if 0 == len(table.index[idx][state][part[idx]]):
+                            del table.index[idx][state][part[idx]]
 
 
     def to_dict(self):
