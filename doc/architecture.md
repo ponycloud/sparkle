@@ -4,16 +4,16 @@
 
 > Virtual infrastructure should behave like a real one.
 
-The real infrastructure will never tell you that it's impossible to turn
+The real infrastructure never tells you that it's impossible to turn
 off a server, you just pull the plug. In reality, popular open source
 solutions will eventually introduce you to endlessly spinning spinners,
 undeletable servers that are no longer in the rack and all other kinds of
 new trouble you did not have with the plain old metal.
 
-When you, be it user or the operator, say that a constantly failing
+Whenever you, as the user or the operator, say that a constantly failing
 operation shall not be carried out after all, the platform needs to
 accomodate. It needs to stop trying and just listen to you. After all, you
-are the one giving the orders.
+are the one giving orders.
 
 
 # Sparkle
@@ -24,11 +24,11 @@ simultaneously providing managed access to the database via it's custom
 RESTful API. It also holds information about current state of the platform
 that is readily accessible to users and operators using the same API.
 
-During the times when the database is not available, for example during an
+Whenever the database is not available, for example as a result of an
 outage, Sparkle continues to manage all Twilight instances from memory.
 This is possbile because it holds complete copy of configuration in it's
 internal data structures in order to be able to serve user requests and
-make decisions real quick.
+make decisions really fast.
 
 When the platform is booting up and the database is in a managed instance,
 Sparkle is able to inquire Twilights about last known bootstrap
@@ -43,21 +43,22 @@ Sparkle can even be made high-available in such settings.
 Twilight is a Python [Twisted][] daemon that translates configuration
 obtained from Sparkle to state of the system it is running on. The most
 notable responsibilities of Twilight are management of networks, both
-traditional and distributed storage and virtual machines (instances).
+traditional, management of storage for the distributed storage feature
+and management of virtual machines (instances).
 
 Twilight hosts are mostly stateless, which means that they can be booted
 directly from the network (which is something Luna does, by the way). Once
 running, Twilight reaches out to Sparkle in order to get it's configuration
 and also hooks to [libvirt][] and udev to gather information about the
-system.
+system. Aditional info is taken from sys.
 
 Twilight hosts may be mostly stateless, but there is an exception to this
-rule. Since each system have a unique `uuid` (we kind of assume the one
+rule. Since each system has an unique `uuid` (we kind of assume the one
 provided by the BIOS is, in fact, unique), we can look at the disks as they
 come in and assemble the RAID with identical `uuid`. This RAID carries a
 small (1GB) file system mounted on `/boot` that holds copy of Twilight
 image plus the "bootstrap configuration" dump we mentioned in the Sparkle
-section. The RAID have old-style metadata and carries a bootloader, which,
+section. The RAID has old-style metadata and carries a bootloader, which,
 all combined, makes it possible to boot the whole platform even without a
 dedicated controller. But more on that later.
 
@@ -70,7 +71,7 @@ The messages from Twilight to Sparkle always include `uuid` of the machine
 the Twilight is running on.
 
 Messages from Sparkle do not need to include such identification, since
-there is at most one active Sparkle instance at any time.
+there is at most one active Sparkle instance at a time.
 
 Example message from Sparkle to Twilight can look like this:
 
@@ -104,7 +105,7 @@ ways.
 
 The current state originates in the Twilight daemons as they join the
 cloud, as new devices are discovered, as virtual instances change their
-state etc..
+state etc.
 
 Both states are replicated from their respective origin to the other
 daemon. In other words, all changes done by users on Sparkle are quickly
