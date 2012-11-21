@@ -1,0 +1,8 @@
+#!/bin/bash -e
+
+cd "$(dirname "${0}")/.."
+
+rsync -av '.' --files-from=website \
+	cloud@cloud.digiverse.cz:/srv/cloud/
+
+# EOF
