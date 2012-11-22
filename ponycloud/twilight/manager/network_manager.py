@@ -197,5 +197,10 @@ class NetworkManager(object):
         print '>>> bridge event', action, row.pkey
 
 
+    def address_event(self, action, row):
+        """Sink for nic_role/address events."""
+        print '>>> address event', action, row.pkey
+
+
 # vim:set sw=4 ts=4 et:
 # -*- coding: utf-8 -*-

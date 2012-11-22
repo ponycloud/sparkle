@@ -124,17 +124,29 @@ class ModelManager(object):
                 if row.desired['role'] in ('core', 'management'):
                     self.bridge_event('configure', row)
 
+        def before_address_update(table, row):
+            if row.desired is not None:
+                if row.desired['role'] not in ('core', 'management'):
+                    self.address_event('deconfigure', row)
+
+        def after_address_update(table, row):
+            if row.desired is not None:
+                if row.desired['role'] not in ('core', 'management'):
+                    self.address_event('configure', row)
+
         self.model['nic'].on_before_row_update(before_nic_update, ['desired'])
         self.model['nic'].on_after_row_update(after_nic_update, ['desired'])
 
         self.model['bond'].on_before_row_update(before_bond_update, ['desired'])
         self.model['bond'].on_after_row_update(after_bond_update, ['desired'])
 
+        self.model['nic_role'].on_before_row_update(before_address_update, ['desired'])
         self.model['nic_role'].on_before_row_update(before_bridge_update, ['desired'])
         self.model['nic_role'].on_before_row_update(before_vlan_update, ['desired'])
 
         self.model['nic_role'].on_after_row_update(after_vlan_update, ['desired'])
         self.model['nic_role'].on_after_row_update(after_bridge_update, ['desired'])
+        self.model['nic_role'].on_after_row_update(after_address_update, ['desired'])
     # /def watch_model
 
 # /class ModelManager
