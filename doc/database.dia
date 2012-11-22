@@ -571,7 +571,7 @@ Ethernet or Infiniband.#</dia:string>
             <dia:string>#varchar#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#Unique identificator of the disk, specific for every disk type, expect WWNs, "iqn:...something" etc..#</dia:string>
+            <dia:string>#Unique identificator of the disk, specific for every disk type. Expect WWNs, "iqn:...something" et cetera.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="true"/>
@@ -721,7 +721,13 @@ Local disk, fiber channel attached disk, iscsi attached disk.#</dia:string>
         <dia:string>#raid#</dia:string>
       </dia:attribute>
       <dia:attribute name="comment">
-        <dia:string>#RAID, what else to add?#</dia:string>
+        <dia:string>#Linux software RAID.
+
+Physical storage can become available to tenants in two ways. Either by using pLVM, where the disks are sliced directly, or by adding the disks to a software RAID, which is host-local and can be used to hold distributed storage data. If a host needs a swap space, it also needs a RAID.
+
+It is possible to create RAID with zero disks. It is the simplest possible case as the platform don't really have to do anything. With just one disk, a degraded RAID is formed. From two up the RAID behaves normally, using optional odd disk as a hot spare.
+
+See [logical_volume](#logical_volume) for info on how are RAIDs further sliced.#</dia:string>
       </dia:attribute>
       <dia:attribute name="visible_comment">
         <dia:boolean val="false"/>
@@ -914,7 +920,13 @@ So far, we only support RAID10.#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
             <dia:string>#{swap, storage}
-Swap is obvious, storage means this slice is a member of a storage pool.#</dia:string>
+
+**swap**
+:    Logical volume is made directly available to the kernel for paging.
+
+**storage**
+:    Logical volume is part of given [storage_pool](#storage_pool). This might imply a file system, running some kind of service, all to fully incorporate the volume into the pool.
+#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>
@@ -1427,7 +1439,7 @@ Address layers to be used for transmit hashing.#</dia:string>
             <dia:string>#varchar#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#Human-readable name of the CPU profile, such as "universal", "high-performance", "amd", "intel" etc..#</dia:string>
+            <dia:string>#Human-readable name of the CPU profile, such as "universal", "high-performance", "amd", "intel" et cetera.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>
@@ -5005,7 +5017,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#int#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#VLAN tag, if for a non-default VLAN. Note that for core networks the vlan_tag on the tenant needs to match vlan_tag of network.#</dia:string>
+            <dia:string>#VLAN tag, if for a non-default VLAN.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>

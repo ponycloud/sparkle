@@ -144,7 +144,7 @@ for key, table in sorted(tables.iteritems(), key=lambda (key,val): (val['name'],
 			print ''
 
 	if table['referenced_by']:
-		print '## Refereces from other tables'
+		print '## References from other tables'
 		print ''
 
 		for reference in table['referenced_by']:
