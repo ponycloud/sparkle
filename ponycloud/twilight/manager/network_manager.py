@@ -98,8 +98,9 @@ class NetworkManager(object):
         """Remove the bond interface."""
 
         if row.get('bond_name') is not None:
-            print 'destroy bond %s' % row['bond_name']
-            self.networking[row['bond_name']].destroy()
+            if row['bond_name'] in self.networking:
+                print 'destroy bond %s' % row['bond_name']
+                self.networking[row['bond_name']].destroy()
 
         # And remember it is no longer there.
         self.apply_changes([('bond', row.pkey, 'current', {
@@ -182,13 +183,7 @@ class NetworkManager(object):
         elif action == 'configure':
             self.create_bond(row)
 
-        elif action == 'remove':
-            self.apply_changes([('bond', row.pkey, 'current', {
-                'bond_name': None,
-                'bond_configured': False,
-            })])
-
-        elif action == 'deconfigure':
+        elif action in ('remove', 'deconfigure'):
             self.remove_bond(row)
 
 
