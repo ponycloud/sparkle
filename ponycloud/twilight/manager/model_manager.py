@@ -17,7 +17,7 @@ class ModelManager(object):
         self.inseq = 0
 
         # Our primary configuration store. Seed with our identity.
-        # This will actually send out the identity to Sparkle.
+        # Identity will be sent with initial resync.
         self.model = Model()
         self.model.load([('host', self.uuid, 'current', {'uuid': self.uuid})])
 
@@ -90,63 +90,16 @@ class ModelManager(object):
     def watch_model(self):
         """Register model watches to be able to react to state changes."""
 
-        def before_nic_update(table, row):
-            if row.desired is not None:
-                self.nic_event('deconfigure', row)
+        def action_handler(action):
+            def state_handler(table, row):
+                self.raise_event((action, table.name), row)
+                self.raise_event((action, table.name, row.pkey), row)
+            return state_handler
 
-        def after_nic_update(table, row):
-            if row.desired is not None:
-                self.nic_event('configure', row)
-
-        def before_bond_update(table, row):
-            if row.desired is not None:
-                self.bond_event('deconfigure', row)
-
-        def after_bond_update(table, row):
-            if row.desired is not None:
-                self.bond_event('configure', row)
-
-        def before_vlan_update(table, row):
-            if row.desired is not None:
-                self.vlan_event('deconfigure', row)
-
-        def after_vlan_update(table, row):
-            if row.desired is not None:
-                self.vlan_event('configure', row)
-
-        def before_bridge_update(table, row):
-            if row.desired is not None:
-                if row.desired['role'] in ('core', 'management'):
-                    self.bridge_event('deconfigure', row)
-
-        def after_bridge_update(table, row):
-            if row.desired is not None:
-                if row.desired['role'] in ('core', 'management'):
-                    self.bridge_event('configure', row)
-
-        def before_address_update(table, row):
-            if row.desired is not None:
-                if row.desired['role'] not in ('core', 'management'):
-                    self.address_event('deconfigure', row)
-
-        def after_address_update(table, row):
-            if row.desired is not None:
-                if row.desired['role'] not in ('core', 'management'):
-                    self.address_event('configure', row)
-
-        self.model['nic'].on_before_row_update(before_nic_update, ['desired'])
-        self.model['nic'].on_after_row_update(after_nic_update, ['desired'])
-
-        self.model['bond'].on_before_row_update(before_bond_update, ['desired'])
-        self.model['bond'].on_after_row_update(after_bond_update, ['desired'])
-
-        self.model['nic_role'].on_before_row_update(before_address_update, ['desired'])
-        self.model['nic_role'].on_before_row_update(before_bridge_update, ['desired'])
-        self.model['nic_role'].on_before_row_update(before_vlan_update, ['desired'])
-
-        self.model['nic_role'].on_after_row_update(after_vlan_update, ['desired'])
-        self.model['nic_role'].on_after_row_update(after_bridge_update, ['desired'])
-        self.model['nic_role'].on_after_row_update(after_address_update, ['desired'])
+        for t in ('nic', 'bond', 'nic_role'):
+            self.model[t].on_create_state(action_handler('create'), ['desired'])
+            self.model[t].on_update_state(action_handler('update'), ['desired'])
+            self.model[t].on_delete_state(action_handler('delete'), ['desired'])
     # /def watch_model
 
 # /class ModelManager

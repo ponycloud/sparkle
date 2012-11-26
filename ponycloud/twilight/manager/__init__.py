@@ -8,8 +8,11 @@ from model_manager import ModelManager
 from udev_manager import UdevManager
 from network_manager import NetworkManager
 
+from ponycloud.common.events import EventMixin
 
-class Manager(VirtManager, ModelManager, UdevManager, NetworkManager):
+
+class Manager(VirtManager, ModelManager, UdevManager, NetworkManager, \
+              EventMixin):
     """
     The main application logic of Twilight.
 

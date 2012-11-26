@@ -92,6 +92,9 @@ class Table(dict):
         # Callbacks that subscribe to row events.
         self.before_row_update_callbacks = []
         self.after_row_update_callbacks = []
+        self.create_state_callbacks = []
+        self.update_state_callbacks = []
+        self.delete_state_callbacks = []
 
 
     @classmethod
@@ -134,6 +137,38 @@ class Table(dict):
                                                  'states': states})
 
 
+    def on_create_state(self, callback, states=['desired', 'current']):
+        """Register function to call after a state is created."""
+        for rec in self.create_state_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.create_state_callbacks.append({'callback': callback,
+                                            'states': states})
+
+    def on_update_state(self, callback, states=['desired', 'current']):
+        """Register function to call after a state is updated."""
+        for rec in self.update_state_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.update_state_callbacks.append({'callback': callback,
+                                            'states': states})
+
+
+    def on_delete_state(self, callback, states=['desired', 'current']):
+        """Register function to call after a state is deleted."""
+        for rec in self.delete_state_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.delete_state_callbacks.append({'callback': callback,
+                                            'states': states})
+
+
     def update_row(self, pkey, state, part):
         """
         Update/patch table row.
@@ -156,14 +191,20 @@ class Table(dict):
             if state in rec['states']:
                 rec['callback'](self, row)
 
+        # {create, update, delete} callbacks interested in this event.
+        state_callbacks = []
+
         if part is None:
-            # Remove the corresponding row part.
+            if getattr(row, state) is not None:
+                state_callbacks = self.delete_state_callbacks
             setattr(row, state, None)
         else:
             # Patch the corresponding row part.
             if getattr(row, state) is None:
+                state_callbacks = self.create_state_callbacks
                 setattr(row, state, part)
             else:
+                state_callbacks = self.update_state_callbacks
                 getattr(row, state).update(part)
 
         if row.desired is None and row.current is None:
@@ -173,8 +214,8 @@ class Table(dict):
             # Index the updated row.
             row.index(self)
 
-        # Fire callbacks to inform subscribers that now row is in place.
-        for rec in self.after_row_update_callbacks:
+        # Fire both after-row and state callbacks.
+        for rec in self.after_row_update_callbacks + state_callbacks:
             if state in rec['states']:
                 rec['callback'](self, row)
 
@@ -302,6 +343,12 @@ class Row(object):
 
     def to_dict(self):
         return {'desired': self.desired, 'current': self.current}
+
+
+    def __repr__(self):
+        desired = ' +desired' if self.desired is not None else ''
+        current = ' +current' if self.current is not None else ''
+        return '<Row %s%s%s>' % (self.pkey, desired, current)
 # /class Row
 
 
