@@ -87,6 +87,11 @@ class ModelManager(object):
         self.outseq += 1
 
 
+    def apply_change(self, table, pkey, state, part):
+        """Applies just one change."""
+        return self.apply_changes([(table, pkey, state, part)])
+
+
     def watch_model(self):
         """Register model watches to be able to react to state changes."""
 

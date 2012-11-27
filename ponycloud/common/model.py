@@ -299,24 +299,18 @@ class Row(object):
         self.current = None
 
 
-    def __getitem__(self, key):
-        """Returns key from either state, desired first."""
-
-        if self.desired is not None and key in self.desired:
-            return self.desired[key]
-
-        if self.current is not None and key in self.current:
-            return self.current[key]
-
-        raise KeyError('key %s not found in either state' % key)
-
-
-    def get(self, key, default=None):
-        """Same as __getitem__(), but returns default instead of failing."""
-        try:
-            return self[key]
-        except KeyError:
+    def get_current(self, key, default=None):
+        """Get value for given key in the current state."""
+        if self.current is None or key not in self.current:
             return default
+        return self.current[key]
+
+
+    def get_desired(self, key, default=None):
+        """Get value for given key in the current state."""
+        if self.desired is None or key not in self.desired:
+            return default
+        return self.desired[key]
 
 
     def index(self, table):
