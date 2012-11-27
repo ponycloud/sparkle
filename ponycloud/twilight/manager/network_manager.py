@@ -1,5 +1,6 @@
 #!/usr/bin/python -tt
 
+from twisted.internet import reactor
 from ponycloud.twilight.network import *
 
 class NetworkManager(object):
@@ -150,22 +151,38 @@ class NetworkManager(object):
         bond = Bond.create('pc-bond%i' % self.bondseq)
         self.bondseq += 1
 
+        # Tell system to create bridge for this bond.
+        bridge = Bridge.create('pc-br%i' % self.brseq)
+        self.brseq += 1
+
         # Write down it's name and that it's not ready yet.
         self.apply_change('bond', row.pkey, 'current', {
             'bond_name': bond.name,
+            'bridge_name': bridge.name,
             'state': 'creating',
         })
 
         # Wait 'till it appears so that we can configure it properly.
-        @self.handle_events([('add', 'bond', 'by-uuid', row.pkey)], once=True)
-        def bond_ready(row):
-            # Now it's ready, write it down.
+        @self.handle_events([('add', 'bond', 'by-uuid', row.pkey),
+                             ('add', 'bridge', 'by-uuid', row.pkey)],
+                            once=True)
+        def bond_ready(row, row2):
+            # Plug the bond into the bridge and set it up.
+            bridge.port_add(bond.name)
+            bridge.state = 'up'
+
+            # Now we are ready, write it down.
             self.apply_change('bond', row.pkey, 'current', {
                 'state': 'present',
             })
 
-            # The update handler will set things up for us.
-            self.update_bond(row)
+            if row.desired is not None:
+                # The update handler will set things up for us.
+                self.update_bond(row)
+            else:
+                # If the bond have been deconfigured,
+                # delete handler will clean things up for us.
+                self.delete_bond(row)
 
 
     def update_bond(self, row):
@@ -215,8 +232,17 @@ class NetworkManager(object):
         """
 
         if row.get_current('state') == 'present':
+            if row.get_current('bridge_name') is not None:
+                bridge = self.networking[row.current['bridge_name']]
+                for port in bridge.ports:
+                    bridge.port_del(port)
+                bridge.state = 'down'
+                bridge.destroy()
+
             if row.get_current('bond_name') is not None:
-                self.networking[row.current['bond_name']].destroy()
+                bond = self.networking[row.current['bond_name']]
+                bond.state = 'down'
+                bond.destroy()
 
 
     def create_nic_role(self, row):
@@ -273,7 +299,8 @@ class NetworkManager(object):
                 self.raise_event(('add', 'vlan', 'by-uuid', row.pkey), row)
 
         elif isinstance(iface, Bridge):
-            rows = self.model['nic_role'].list(bridge_name=dev.sys_name)
+            rows = self.model['nic_role'].list(bridge_name=dev.sys_name) \
+                 + self.model['bond'].list(bridge_name=dev.sys_name)
             if len(rows) > 0:
                 row = rows.pop()
                 self.raise_event(('add', 'bridge', 'by-uuid', row.pkey), row)
@@ -312,6 +339,24 @@ class NetworkManager(object):
                     })
 
             return
+
+
+    def network_cleanup(self):
+        """
+        Clean up network interfaces.
+
+        This routine is normally not really useful, but during testing it
+        cleans up most of the mess Twilight caused to the system, which
+        can be quite helpful.
+        """
+
+        for t in ('nic_role', 'bond'):
+            for row in self.model[t].itervalues():
+                for key in ('bridge_name', 'vlan_name', 'bond_name'):
+                    if row.get_current(key) is not None:
+                        iface = self.networking[row.current[key]]
+                        iface.state = 'down'
+                        iface.destroy()
 
 
 # vim:set sw=4 ts=4 et:

@@ -353,7 +353,7 @@ class Address(Table):
 
 class Bond(Table):
     name = 'bond'
-    indexes = ['host', 'bond_name']
+    indexes = ['host', 'bond_name', 'bridge_name']
 
 
 class Cluster(Table):

@@ -73,6 +73,7 @@ class EventMixin(object):
         # Create wrapper to prevent modification of the original handler.
         @wraps(handler)
         def wrapper(*args, **kwargs):
+            print 'INVOKING', handler.__name__, args
             return handler(*args, **kwargs)
 
         wrapper.wait_for = {}
@@ -80,7 +81,7 @@ class EventMixin(object):
         wrapper.run_once = once
 
         for ev in events:
-            print 'SUBSCRIBE', ev
+            print 'SUBSCRIBE', ev, '->', handler.__name__
             wrapper.wait_for[ev] = None
             self._events.setdefault(ev, set()).add(wrapper)
     # /def on_events

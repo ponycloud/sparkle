@@ -15,6 +15,9 @@ from sys import argv
 # Configuration is stored in a boring ini file.
 from ConfigParser import ConfigParser
 
+# For emergency cleanup.
+import atexit
+
 # The application itself also comes in handy... ;-)
 from ponycloud.twilight import *
 
@@ -33,6 +36,9 @@ if __name__ == '__main__':
 
         # Schedule call to the manager.
         reactor.callLater(0, manager.start)
+
+        # Perform an emergency cleanup upon exit.
+        atexit.register(manager.network_cleanup)
 
         # Run twisted.
         reactor.run()
