@@ -16,8 +16,7 @@ class EventMixin(object):
     strings or tuples. Event can be fired or cancelled. If the event is
     fired, associated handlers might be executed (once all events they
     depend on have been fired) or it might be cancelled, in which case
-    the counts for all interested handlers are reset and one-time
-    handlers are removed.
+    the event is not fired and all it's handlers are removed.
 
     Handlers are not run immediately, they are queued using Twisted's
     `reactor.callLater()` function, so don't rely on them being done
@@ -43,10 +42,8 @@ class EventMixin(object):
                 # Queue the handler.
                 reactor.callLater(0, h, *args)
 
-                # Reset the results collected so far and remove
-                # all one-time handlers.
+                # Remove one-time handlers.
                 for ev in h.wait_for:
-                    h.wait_for[ev] = None
                     if h.run_once:
                         getattr(self, '_events', {}).get(ev, set()).discard(h)
     # /def raise_event
@@ -63,8 +60,7 @@ class EventMixin(object):
         for h in list(handlers):
             for ev in h.wait_for:
                 h.wait_for[ev] = None
-                if h.run_once:
-                    getattr(self, '_events', {}).get(ev, set()).discard(h)
+                getattr(self, '_events', {}).get(ev, set()).discard(h)
     # /def cancel_event
 
 
@@ -84,6 +80,7 @@ class EventMixin(object):
         wrapper.run_once = once
 
         for ev in events:
+            print 'SUBSCRIBE', ev
             wrapper.wait_for[ev] = None
             self._events.setdefault(ev, set()).add(wrapper)
     # /def on_events
