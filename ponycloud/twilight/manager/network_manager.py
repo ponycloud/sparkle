@@ -10,9 +10,8 @@ class NetworkManager(object):
         # Network configuration object.
         self.networking = Networking()
 
-        # Sequences for bond and bridge naming.
+        # Sequence for bond naming.
         self.bondseq = 0
-        self.brseq = 0
 
         # Register event handlers that take care of configuration changes.
         for t in ('nic', 'bond', 'nic_role'):
@@ -42,62 +41,25 @@ class NetworkManager(object):
                     }))[0])
 
 
-    def create_nic(self, row):
-        """
-        NIC has been configured.
-
-        The NIC may now belong to a bond, which is why we registed an
-        event handler that waits for both the NIC and bond to appear
-        and then enslaves the NIC to the bond.
-
-        The handler it installs is persistent and will remain active
-        until the NIC have been removed.
-        """
-
-        if row.get_desired('bond') is None:
+    def create_nic(self, nic_row):
+        if nic_row.get_desired('bond') is None:
             # Do nothing if the NIC has no bond.
             return
 
-        @self.handle_events([('add', 'bond', 'by-uuid',   row.desired['bond']),
-                             ('add', 'nic',  'by-hwaddr', row.pkey)])
-        def add_nic_to_bond(bond, nic):
-            # Abort if the NIC should no longer be plugged into this bond.
-            if nic.get_desired('bond') != bond.pkey:
-                return
+        # Find the corresponding bond row.
+        bond_row = self.model['bond'][nic_row.desired['bond']]
 
-            # Enslave the NIC.
-            nic_name = nic.current['nic_name']
-            bond_name = bond.current['bond_name']
-
-            if nic_name not in self.networking[bond_name].slaves:
-                self.networking[nic_name].state = 'down'
-                self.networking[bond_name].slave_add(nic_name)
-
-                # Store the bond in the current state to let user know.
-                self.apply_change('nic', row.pkey, 'current', {
-                    'bond': row.desired['bond'],
-                })
-
-        # Poke network interfaces to trigger the event.
-        self.poke_network_interface(row)
-        self.poke_network_interface(self.model['bond'][row.desired['bond']])
+        # Make sure the bond exists, it will also take care of the enslavement.
+        self._setup_bond(bond_row)
 
 
     def update_nic(self, row):
-        """
-        NIC configuration have been changed.
-
-        Make sure it is still connected to the correct bond and if
-        it is not, connect it to the correct one.
-        """
-
         if row.get_current('nic_name') is None:
-            # Do not bother if the interface does not yet exist.
+            # Do not bother if the interface does not exist.
             return
 
         if row.get_desired('bond') != row.get_current('bond'):
-            # Act as if the NIC has been deleted to remove it from the bond.
-            # It also cancels the nic/bond event handler.
+            # Act as if the NIC have been deconfigured.
             self.delete_nic(row)
 
         # Enslave NIC to the correct bond and everything...
@@ -105,205 +67,132 @@ class NetworkManager(object):
 
 
     def delete_nic(self, row):
-        """
-        NIC have been deconfigured.
-
-        We need to remove it from any bond it's a slave of and cancel
-        the event handler from `create_nic()`.
-        """
-
-        # Remove the NIC from the bond, if required.
-        if row.get_current('bond') is not None:
-            bond = self.model['bond'][row.current['bond']]
-            if bond.get_current('bond_name') is not None:
-                bond = self.networking[bond.current['bond_name']]
-                if row.current['nic_name'] in bond.slaves:
-                    bond.slave_del(row.current['nic_name'])
-                self.apply_change('nic', row.pkey, 'current', {
-                    'bond': None
-                })
-
-        # Cancel event handlers.
-        self.cancel_event(('add', 'nic', 'by-hwaddr', row.pkey))
-
-
-    def create_bond(self, row):
-        """
-        A bond is to be created.
-
-        We need to generate a name and store it in the current state of
-        the bond. Then we tell the system to actually create the bond.
-
-        Since the bond is not created immediately, we need to reflect that
-        in the current state.
-
-        The bond creation is two-phase. First we issue a request to create
-        it and then, once udev says it's here, a callback configures it.
-        If the bond is deconfigured in between these two steps, the
-        configuration callback just destroys it.
-        """
-
-        # Verify that the event is still valid and the bond should exist.
-        if row.desired is None:
+        if row.get_current('bond') is None:
+            # Not a bond member, there is nothing special to do.
             return
 
-        # Tell system to create the bond.
-        bond = Bond.create('pc-bond%i' % self.bondseq)
-        self.bondseq += 1
+        # Find corresponding bond row.
+        bond_row = self.model['bond'][row.current['bond']]
 
-        # Tell system to create bridge for this bond.
-        bridge = Bridge.create('pc-br%i' % self.brseq)
-        self.brseq += 1
+        # Get the bond configuration proxy.
+        bond = self.networking[bond_row.current['bond_name']]
 
-        # Write down it's name and that it's not ready yet.
-        self.apply_change('bond', row.pkey, 'current', {
-            'bond_name': bond.name,
-            'bridge_name': bridge.name,
-            'state': 'creating',
-        })
+        if row.get_current('nic_name') is not None:
+            if row.current['nic_name'] in bond.slaves:
+                # Remove the NIC as a bond slave.
+                bond.slave_del(row.current['nic_name'])
 
-        # Wait 'till it appears so that we can configure it properly.
-        @self.handle_events([('add', 'bond', 'by-uuid', row.pkey),
-                             ('add', 'bridge', 'by-uuid', row.pkey)],
-                            once=True)
-        def bond_ready(row, row2):
-            # Plug the bond into the bridge and set it up.
-            bridge.port_add(bond.name)
-            bridge.state = 'up'
-
-            # Now we are ready, write it down.
-            self.apply_change('bond', row.pkey, 'current', {
-                'state': 'present',
+            # Note down that this NIC no longer belongs to the bond.
+            self.apply_change('nic', row.pkey, 'current', {
+                'bond': None,
             })
 
-            if row.desired is not None:
-                # The update handler will set things up for us.
-                self.update_bond(row)
-            else:
-                # If the bond have been deconfigured,
-                # delete handler will clean things up for us.
-                self.delete_bond(row)
+            # If the bond have no more slaves, delete it completely.
+            if 0 == len(bond.slaves):
+                self._destroy_bond(bond_row)
+
+
+    def create_bond(self, bond_row):
+        for i in xrange(9999):
+            if self.bondseq > 9999:
+                self.bondseq = 0
+            name = 'pc-%i' % self.bondseq
+            self.bondseq += 1
+
+            if name not in self.networking:
+                break
+
+        # Just die if we have more than 10'000 bonds.
+        assert name not in self.networking
+
+        # Update current state.
+        self.apply_change('bond', bond_row.pkey, 'current', {
+            'bond_name': name,
+            'bridge_name': name + 'b',
+            'state': 'missing',
+        })
+        self.bondseq += 1
 
 
     def update_bond(self, row):
-        """
-        Bond configuration have been changed.
-
-        If the bond is already present, we need to bring it down,
-        set it's options and bring it back up. No event is fired.
-        """
-
-        if row.desired is None or row.get_current('state') is None:
-            # Do nothing if the bond configuration have since disappeared or
-            # the bond creation have not yet happened.
-            return
-
-        # Get the configuration proxy.
-        bond = self.networking[row.current['bond_name']]
-
-        # Remove slave interfaces for the configuration to work.
-        slaves = bond.slaves
-        for slave in slaves:
-            bond.slave_del(slave)
-
-        # Linux needs the bond down to change it's options.
-        bond.state = 'down'
-
-        # Set the configuration flags.
-        for k in ('mode', 'xmit_hash_policy', 'lacp_mode'):
-            if row.get_desired(k) is not None:
-                setattr(bond, k, row.desired[k])
-
-        # Bring the bond back up.
-        bond.state = 'up'
-
-        # Re-enslave the interfaces.
-        for slave in slaves:
-            bond.slave_add(slave)
+        self.delete_bond(row)
+        self.create_bond(row)
 
 
     def delete_bond(self, row):
-        """
-        A bond is to be destroyed.
-
-        If the bond is in the 'present' state, it is destroyed.
-        The bond in the process of being created is destroyed by it's
-        configure callback. See `create_bond()` for more info.
-        """
-
-        if row.get_current('state') == 'present':
-            if row.get_current('bridge_name') is not None:
-                bridge = self.networking[row.current['bridge_name']]
-                for port in bridge.ports:
-                    bridge.port_del(port)
-                bridge.state = 'down'
-                bridge.destroy()
-
-            if row.get_current('bond_name') is not None:
-                bond = self.networking[row.current['bond_name']]
-                bond.state = 'down'
-                bond.destroy()
+        # Destroy the bond and everything on top of it.
+        self._destroy_bond(row)
 
 
-    def create_nic_role(self, row):
-        pass
+    def create_nic_role(self, role_row):
+        # Row for role's bond.
+        bond_row = self.model['bond'][role_row.desired['bond']]
+
+        # If we do not have to create a VLAN interface and another bridge.
+        if role_row.get_desired('vlan_id') is None:
+            address = None
+            if bond_row.get_current('state') == 'present':
+                address = role_row.desired['address']
+                self._setup_nic_role(role_row)
+
+            # We might be done here.
+            self.apply_change('nic_role', role_row.pkey, 'current', {
+                'bond': None,
+                'vlan_name': None,
+                'bridge_name': None,
+                'interface': bond_row.current['bridge_name'],
+                'address': address,
+                'state': bond_row.get_current('state', 'missing'),
+            })
+
+        else:
+            name = '%s.%i' % (bond_row.current['bridge_name'],
+                              role_row.desired['vlan_id'])
+            self.apply_change('nic_role', role_row.pkey, 'current', {
+                'bond': None,
+                'vlan_name': name,
+                'bridge_name': name + 'b',
+                'interface': name + 'b',
+                'address': None,
+                'state': 'missing',
+            })
+
+        # Now, if the bond is already present, setup the role.
+        if bond_row.get_current('state') == 'present':
+            self._setup_nic_role(role_row)
 
 
     def update_nic_role(self, row):
-        pass
+        self.delete_nic_role(row)
+        self.create_nic_role(row)
 
 
     def delete_nic_role(self, row):
-        pass
+        self._destroy_nic_role(row)
 
 
     def add_net(self, dev):
-        """
-        New network device have appeared.
-
-        If the network device is a Physical NIC, we need to pair it's
-        device name with the hwaddr used as the primary key in data model.
-        That means locating/adding current state with the hardware addess
-        mapped to nic name.
-
-        If any network interface already has the mapping of it's primary
-        key to the the device name done, also raises 'by-<pkey>' event for
-        that interface. See `create_nic()`.
-        """
-
         # Get the network device configuration proxy.
         iface = self.networking[dev.sys_name]
 
-        # Pair up physical interfaces in current state and note that
-        # it is not yet member of any bond.
         if isinstance(iface, Physical):
+            # Pair up physical interfaces in current state and note that
+            # it is not yet member of any bond.
             self.apply_change('nic', iface.hwaddr, 'current', {
                 'nic_name': dev.sys_name,
                 'bond': None,
             })
 
-            row = self.model['nic'].get(iface.hwaddr)
-            if row is not None:
-                self.raise_event(('add', 'nic', 'by-hwaddr', row.pkey), row)
+            # Get the (now definitely existing) NIC row.
+            nic_row = self.model['nic'][iface.hwaddr]
 
-        elif isinstance(iface, Bond):
-            rows = self.model['bond'].list(bond_name=dev.sys_name)
-            if len(rows) > 0:
-                row = rows.pop()
-                self.raise_event(('add', 'bond', 'by-uuid', row.pkey), row)
+            # Check whether the NIC is to be enslaved to a bond.
+            if nic_row.get_desired('bond') is not None:
+                bond_row = self.model['bond'][nic_row.desired['bond']]
 
-        elif isinstance(iface, VLAN):
-            rows = self.model['nic_role'].list(vlan_name=dev.sys_name)
-            if len(rows) > 0:
-                row = rows.pop()
-                self.raise_event(('add', 'vlan', 'by-uuid', row.pkey), row)
-
-        elif isinstance(iface, Bridge):
-            rows = self.model['nic_role'].list(bridge_name=dev.sys_name) \
-                 + self.model['bond'].list(bridge_name=dev.sys_name)
-            if len(rows) > 0:
-                row = rows.pop()
-                self.raise_event(('add', 'bridge', 'by-uuid', row.pkey), row)
+                # Make sure the bond is present. This will also take care
+                # of the enslavement of our new NIC.
+                self._setup_bond(bond_row)
 
 
     def change_net(self, dev):
@@ -311,34 +200,205 @@ class NetworkManager(object):
 
 
     def remove_net(self, dev):
-        """
-        A network interface have disappeared.
-
-        All interface types need to have their current state removed if
-        the interface disappears. If the interface have been a bond,
-        all it's NICs need to have the bond removed from their current state.
-        """
-
-        row = None
-
         rows = self.model['nic'].list(nic_name=dev.sys_name)
         if len(rows) > 0:
             row = rows.pop()
+
+            # Remember last bond of the NIC.
+            current_bond = row.get_current('bond')
+
+            # Drop current state, since the NIC is gone.
             self.apply_change('nic', row.pkey, 'current', None)
+
+            if current_bond is not None:
+                # NIC have been part of a bond, we need to recreate it in
+                # order to fix possibly broken hardware addresses. :-(
+
+                # Get the old bond info.
+                bond_row = self.model['bond'][current_bond]
+                bond = self.networking[row.desired['bond']]
+
+                # Get current slaves of that bond, we do nothing if this
+                # NIC was the only slave.
+                slaves = bond.slaves
+
+                # Get rid of the old bond.
+                self._destroy_bond(bond_row)
+
+                if len(slaves) > 0:
+                    # And since there were some other slaves, we recreate
+                    # the bond again with just them. This will properly
+                    # cascade and bring correct hardware addresses along
+                    # the way.
+                    self._setup_bond(bond_row)
+
+
+    def _setup_bond(self, row):
+        if row.current is None:
+            # Do nothing if we do not yet have any interface names allocated.
             return
 
-        rows = self.model['bond'].list(bond_name=dev.sys_name)
-        if len(rows) > 0:
-            row = rows.pop()
+        if row.current['bond_name'] not in self.networking:
+            # Create the bond interface and bring it down for configuration.
+            bond = Bond.create(row.current['bond_name'])
+            bond.state = 'down'
+
+            # Set it's parameters, mode first.
+            for k in ('mode', 'xmit_hash_policy', 'lacp_mode'):
+                if row.get_desired(k) is not None:
+                    setattr(bond, k, row.desired[k])
+
+            # Now we can bring the bond up.
+            bond.state = 'up'
+        else:
+            bond = self.networking[row.current['bond_name']]
+
+        # Enslave all NICs that should be enslaved to it and are present.
+        for nic_row in self.model['nic'].list(bond=row.pkey):
+            if nic_row.get_current('nic_name') is None or \
+               nic_row.get_desired('bond') != row.pkey:
+                # Skip NICs that are not present.
+                continue
+
+            # Get NIC configuration proxy.
+            nic = self.networking[nic_row.current['nic_name']]
+
+            if not nic.name in bond.slaves:
+                # Enslave the NIC to the bond.
+                nic.state = 'down'
+                bond.slave_add(nic.name)
+
+                # Write down that the NIC is now enslaved to this bond.
+                self.apply_change('nic', nic_row.pkey, 'current', {
+                    'bond': row.pkey,
+                    'nic_name': nic.name,
+                })
+
+        if 0 == len(bond.slaves):
+            # We don't have any slaves, abort!
+            bond.destroy()
+            return
+
+        if row.current['bridge_name'] not in self.networking:
+            # Now, we can create a bridge, configure it and bring it up.
+            bridge = Bridge.create(row.current['bridge_name'])
+            bridge.forward_delay = 0
+            bridge.state = 'up'
+
+            # And plug the bond to that bridge.
+            bridge.port_add(bond.name)
+
+            # Update current state to reflect that this bond is present.
+            self.apply_change('bond', row.pkey, 'current', {
+                'state': 'present',
+            })
+
+        # Finally, create the roles that should be on this bond.
+        for role in self.model['nic_role'].list(bond=row.pkey):
+            if role.get_desired('bond') == row.pkey:
+                self._setup_nic_role(role)
+
+
+    def _destroy_bond(self, row):
+        if row.get_current('state') == 'present':
+            # Find interface configuration proxies.
+            bridge = self.networking[row.current['bridge_name']]
+            bond = self.networking[row.current['bond_name']]
+
+            # Remove all remaining bridge ports.
+            for port in bridge.ports:
+                bridge.port_del(port)
+
+            # Get rid of the bridge.
+            bridge.state = 'down'
+            bridge.destroy()
+
+            # Get rid of the bond.
+            bond.state = 'down'
+            bond.destroy()
+
             self.apply_change('bond', row.pkey, 'current', None)
 
-            for nic in self.model['nic'].list(bond=row.pkey):
-                if nic.get_desired('bond') == row.pkey:
-                    self.apply_change('nic', nic.pkey, 'current', {
-                        'bond': None,
-                    })
+        # Destroy all roles defined on the bond as well.
+        for role in self.model['nic_role'].list(bond=row.pkey):
+            if role.get_current('bond') == row.pkey:
+                self._destroy_nic_role(role)
 
+
+    def _setup_nic_role(self, row):
+        if row.current is None:
+            # Do nothing if we do not yet have any interface names allocated.
             return
+
+        # Get the bond the role is defined on.
+        bond_row = self.model['bond'][row.desired['bond']]
+        bond_bridge = self.networking[bond_row.current['bridge_name']]
+
+        # Role may use VLAN, if it does, we need to create whole bunch
+        # of interface to support it.
+        if row.get_desired('vlan_id') is not None:
+            if row.current['bridge_name'] not in self.networking:
+                bridge = Bridge.create(row.current['bridge_name'])
+                bridge.forward_delay = 0
+                bridge.state = 'up'
+            else:
+                bridge = self.networking[row.current['bridge_name']]
+
+            if row.current['vlan_name'] not in self.networking:
+                vlan = VLAN.create(bond_bridge.name, row.desired['vlan_id'])
+                vlan.state = 'up'
+            else:
+                vlan = self.networking[row.current['vlan_name']]
+
+            if vlan.name not in bridge.ports:
+                bridge.port_add(vlan.name)
+
+        if row.get_desired('address') is not None:
+            # Assign the address if not yet present.
+            iface = self.networking[row.current['interface']]
+            if row.desired['address'] not in (iface.inet + iface.inet6):
+                iface.addr_add(row.desired['address'])
+
+        self.apply_change('nic_role', row.pkey, 'current', {
+            'bond': bond_row.pkey,
+            'address': row.get_desired('address'),
+            'state': 'present',
+        })
+
+
+    def _destroy_nic_role(self, row):
+        if row.get_current('state') == 'present':
+            # Deconfigure the address if it's not shared.
+            if row.get_current('address') is not None:
+                roles = self.model['nic_role']\
+                        .list(bond=row.current['bond'],
+                              address=row.current['address'])
+
+                if 1 == len(roles):
+                    iface = self.networking[row.current['interface']]
+                    iface.addr_del(row.current['address'])
+
+            # Find interface configuration proxies.
+            bridge = self.networking[row.current['bridge_name']]
+            vlan = self.networking[row.current['vlan_name']]
+
+            # Remove them if they are not shared.
+            roles = self.model['nic_role'].list(bridge_name=bridge.name)
+            if 1 == len(roles):
+                # Remove bridge ports.
+                for port in bridge.ports:
+                    bridge.port_del(port)
+
+                # Get rid of the bridge.
+                bridge.state = 'down'
+                bridge.destroy()
+
+                # Get rid of the vlan.
+                vlan.state = 'down'
+                vlan.destroy()
+
+            # Remove the role from current state.
+            self.apply_change('nic_role', row.pkey, 'current', None)
 
 
     def network_cleanup(self):
@@ -354,9 +414,10 @@ class NetworkManager(object):
             for row in self.model[t].itervalues():
                 for key in ('bridge_name', 'vlan_name', 'bond_name'):
                     if row.get_current(key) is not None:
-                        iface = self.networking[row.current[key]]
-                        iface.state = 'down'
-                        iface.destroy()
+                        if row.current[key] in self.networking:
+                            iface = self.networking[row.current[key]]
+                            iface.state = 'down'
+                            iface.destroy()
 
 
 # vim:set sw=4 ts=4 et:

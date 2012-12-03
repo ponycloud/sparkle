@@ -424,7 +424,7 @@ class NIC(Table):
 
 class NICRole(Table):
     name = 'nic_role'
-    indexes = ['bond', 'vlan_name', 'bridge_name']
+    indexes = ['bond', 'vlan_name', 'bridge_name', 'address']
 
 
 class Quota(Table):
