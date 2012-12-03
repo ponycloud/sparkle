@@ -123,7 +123,7 @@ for key, table in sorted(tables.iteritems(), key=lambda (key,val): (val['name'],
 		print '### &lt;{type}&gt; <span id="{id}" class="{cssclasses}">{name}</span>'.format(name=attribute['name'], id=key+attribute['name'], type=attribute['type'], cssclasses=cssclasses)
 		print ''
 
-		if attribute['type'] == 'enum':
+		if attribute['type'][:4] == 'enum':
 			enum_type = attribute['comment'].split('\n', 1)
 
 			if len(enum_type) == 2:
