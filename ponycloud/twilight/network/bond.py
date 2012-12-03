@@ -4,6 +4,7 @@ from iproute import ip
 
 from iface import Interface
 from sysfs import sys, proc
+from time import sleep
 
 class Bond(Interface):
     """Wraps bonding interfaces."""
@@ -12,7 +13,17 @@ class Bond(Interface):
     def create(cls, name):
         """Create bond interface with given name."""
         sys['class']['net']['bonding_masters'] = '+' + name
-        return cls(name)
+        bond = cls(name)
+        bond.state = 'down'
+
+        for i in xrange(1, 100):
+            try:
+                bond.mode = 'active-backup'
+                break
+            except:
+                sleep(0.1)
+
+        return bond
 
 
     @property
