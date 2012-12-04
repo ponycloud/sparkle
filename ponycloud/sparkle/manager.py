@@ -272,8 +272,6 @@ class Manager(object):
         That is, this validates that specified instance is actually under
         the specified tenant and so on.
         """
-        print path
-        print keys
 
         for i in xrange(len(path)):
             lst = self.model[path[i]].list(**{k: keys[k] for k in path[i - 1:i]})
