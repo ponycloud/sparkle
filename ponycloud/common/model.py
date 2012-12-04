@@ -80,6 +80,10 @@ class Table(dict):
     nm_indexes = {}
 
 
+    # List of child tables. Contains only names.
+    children = []
+
+
     def __init__(self):
         """Prepare internal data structures of the table."""
 
@@ -354,11 +358,13 @@ class Address(Table):
 class Bond(Table):
     name = 'bond'
     indexes = ['host', 'bond_name', 'bridge_name']
+    children = ['nic', 'role']
 
 
 class Cluster(Table):
     name = 'cluster'
     indexes = ['tenant']
+    children = ['instance']
 
 
 class ClusterInstance(Table):
@@ -387,7 +393,7 @@ class Host(Table):
     name = 'host'
     nm_indexes = {'host_disk':     ('host', 'disk'),
                   'host_instance': ('host', 'instance')}
-
+    children = ['nic', 'bond', 'disk', 'raid']
 
 class Image(Table):
     name = 'image'
@@ -399,6 +405,7 @@ class Instance(Table):
     name = 'instance'
     indexes = ['cpu_profile', 'tenant']
     nm_indexes = {'host_instance': ('instance', 'host')}
+    children = ['vdisk', 'cluster', 'vnic']
 
 
 class LogicalVolume(Table):
@@ -414,6 +421,7 @@ class Member(Table):
 class Network(Table):
     name = 'network'
     indexes = ['switch']
+    children = ['route']
 
 
 class NIC(Table):
@@ -435,6 +443,7 @@ class Quota(Table):
 class RAID(Table):
     name = 'raid'
     indexes = ['host']
+    children = ['logical_volume', 'disk']
 
 
 class Route(Table):
@@ -444,17 +453,20 @@ class Route(Table):
 
 class StoragePool(Table):
     name = 'storage_pool'
+    children = ['disk']
 
 
 class Switch(Table):
     name = 'switch'
     indexes = ['tenant']
     nm_indexes = {'tenant_switch': ('switch', 'tenant')}
+    children = ['network']
 
 
 class Tenant(Table):
     name = 'tenant'
     nm_indexes = {'tenant_switch': ('tenant', 'switch')}
+    children = ['instance', 'image', 'quota', 'volume', 'cluster', 'switch', 'member',  'volume']
 
 
 class TenantImage(Table):
@@ -472,6 +484,7 @@ class TenantSwitch(Table):
 class User(Table):
     name = 'user'
     pkey = 'email'
+    children = ['member']
 
 
 class VDisk(Table):
@@ -482,12 +495,13 @@ class VDisk(Table):
 class VNIC(Table):
     name = 'vnic'
     indexes = ['instance', 'switch']
-
+    children = ['address', 'switch']
 
 class Volume(Table):
     name = 'volume'
     indexes = ['tenant', 'storage_pool']
     nm_indexes = {'host_volume': ('volume', 'host')}
+    children = ['vdisk', 'extent']
 
 
 class HostDisk(Table):

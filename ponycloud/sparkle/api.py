@@ -121,7 +121,7 @@ def make_collection_handler(manager, path):
             return call(manager.list_collection, path, keys)
         elif 'POST' == request.method:
             data = cjson.decode(request.data)
-            return call(manager.create_entity, path, keys, data)
+            return call(manager.create_or_update_entity, path, keys, data)
 
     handler.__name__ = 'c_' + '_'.join(path)
     return handler
@@ -142,7 +142,7 @@ def make_entity_handler(manager, path):
             return call(manager.get_entity, path, keys)
         elif 'PUT' == request.method:
             data = cjson.decode(request.data)
-            return call(manager.update_entity, path, keys, data)
+            return call(manager.create_or_update_entity, path, keys, data)
         elif 'DELETE' == request.method:
             return call(manager.delete_entity, path, keys)
 

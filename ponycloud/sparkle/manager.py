@@ -272,6 +272,8 @@ class Manager(object):
         That is, this validates that specified instance is actually under
         the specified tenant and so on.
         """
+        print path
+        print keys
 
         for i in xrange(len(path)):
             lst = self.model[path[i]].list(**{k: keys[k] for k in path[i - 1:i]})
@@ -435,10 +437,11 @@ class Manager(object):
 
     @backtrace
     @database_operation
-    def update_entity(self, path, keys, value):
+    def create_or_update_entity(self, path, keys, value):
         """
         Called from API to modify an entity.
         """
+        name = path[-1]
 
         # Validate entity path.
         # This is essential in order to enforce access control, because
@@ -446,27 +449,77 @@ class Manager(object):
         # parent.
         self.validate_path(path, keys)
 
-        # Make sure the value is valid and references correct parent.
-        check_and_fix_parent(path, keys, value)
+        def recurse(path, keys, value):
+            # Make sure the value is valid and references correct parent.
+            check_and_fix_parent(path, keys, value)
 
-        # Get info about the entity.
-        name = path[-1]
-        table = self.model[name]
-        entity = getattr(self.db, name)
+            # Get info about the entity.
+            name = path[-1]
+            table = self.model[name]
+            entity = getattr(self.db, name)
 
-        # This just does not make sense for virtual entities.
-        if table.virtual:
-            raise UserError('cannot update virtual entity')
+            # This just does not make sense for virtual entities.
+            if table.virtual:
+                raise UserError('cannot change virtual entity')
 
-        # Get the current object.
-        obj = entity.filter_by(**{table.pkey: keys[name]}).one()
+            # Get the current object.
+            obj = None
+            if name in keys:
+                row = table.get(keys[name])
+                if row is None or row.desired is None:
+                    if name == 'uuid':
+                        raise UserError('%s/%s not found' \
+                                            % (table.name, keys[name]))
+                else:
+                    obj = entity.filter_by(**{table.pkey: keys[name]}).one()
 
-        # Apply the update to individual columns.
-        # Ignore uuid updates, there is no way we are going to allow
-        # user to change them.  It could compromise security.
-        for c in obj.c:
-            if c.name in value and c.name != 'uuid':
-                setattr(obj, c.name, value[c.name])
+            if obj is None:
+                # Create completely new row.
+                obj = entity.insert(**value)
+                keys[table.name] = getattr(obj, table.pkey)
+            else:
+                # Apply the update to individual columns.
+                # Ignore uuid updates, there is no way we are going to allow
+                # user to change them.  It could compromise security.
+                for c in obj.c:
+                    if c.name in value and c.name != 'uuid':
+                        setattr(obj, c.name, value[c.name])
+
+            # Validate that the children tables are defined in model
+            for child_table in value.get('children', {}):
+                if child_table not in table.children:
+                    raise UserError('invalid child')
+                # ...and that each child is a list
+                if not isinstance(value.get('children')[child_table], list):
+                    raise UserError('list expected')
+                # Get current children so we can delete those not defined in "value"
+                original_children = self.model[child_table].list(**{table.name: keys[name]})
+                entity = getattr(self.db, child_table)
+                # Each row in the children list has to be a dict
+                for child in value.get('children')[child_table]:
+                    if not isinstance(child, dict):
+                        raise UserError('object expected')
+
+                    child_pkey = self.model[child_table].pkey
+                    child_keys = dict(keys.items() + {table.name: getattr(obj, table.pkey)}.items())
+                    if child_pkey in child:
+                        child_keys[child_table] = child[child_pkey]
+                    # Dive into the next level of children
+                    recurse(path + [child_table], child_keys, child)
+
+                # Delete those children that were originally there and are not defined
+                # in the input data
+                for o_child in original_children:
+                    found = False
+                    for c_child in value.get('children')[child_table]:
+                        if c_child.get(self.model[child_table].pkey) == o_child.desired.get(self.model[child_table].pkey):
+                            found = True
+                            break
+                    if not found:
+                        entity.filter_by(**{self.model[child_table].pkey: o_child.desired.get(self.model[child_table].pkey)})\
+                        .delete(synchronize_session=False)
+
+        recurse(path, keys, value)
 
         # Get data from the changelog.
         changes = self.get_changes()
@@ -480,58 +533,7 @@ class Manager(object):
 
         # Return new desired state of the entity.
         return self.model[name][keys[path[-1]]].desired
-    # /def update_entity
-
-
-    @backtrace
-    @database_operation
-    def create_entity(self, path, keys, value):
-        """
-        Called by API to create new entities.
-        """
-        # TODO: Add recursion support using DB relates.
-
-        # Validate entity path.
-        self.validate_path(path[:-1], keys)
-
-        # Make sure the value is valid and references correct parent.
-        check_and_fix_parent(path, keys, value)
-
-        # Get info about the entity.
-        name = path[-1]
-        table = self.model[name]
-        entity = getattr(self.db, name)
-
-        # Do not allow to create virtual entities.
-        if table.virtual:
-            raise UserError('cannot create virtual entity')
-
-        # Make sure we do not set uuid, database will generate one for us.
-        # The only exception is the host table. Hosts have their own uuids.
-        if 'uuid' in value and table.name != 'host':
-            del value['uuid']
-
-        # Attempt creation of new entity.
-        entity.insert(**value)
-
-        # Get data from the changelog.
-        changes = self.get_changes()
-
-        # Attempt to commit the transaction.
-        # This is where consistency is checked on the database side.
-        self.db.commit()
-
-        # Apply changes to the in-memory model.
-        self.apply_changes(changes)
-
-        # Return desired state of the new entity.
-        for table, pkey, state, part in changes:
-            if table == name:
-                return part
-
-        # Or just a poor None if we've failed (which is not very probable).
-        return None
-    # /def create_entity
+    # /def create_or_update_entity
 
 
     @backtrace
