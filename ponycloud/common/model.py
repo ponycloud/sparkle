@@ -364,7 +364,7 @@ class Bond(Table):
 class Cluster(Table):
     name = 'cluster'
     indexes = ['tenant']
-    children = ['instance']
+    children = ['cluster_instance']
 
 
 class ClusterInstance(Table):
@@ -405,7 +405,7 @@ class Instance(Table):
     name = 'instance'
     indexes = ['cpu_profile', 'tenant']
     nm_indexes = {'host_instance': ('instance', 'host')}
-    children = ['vdisk', 'cluster', 'vnic']
+    children = ['vdisk', 'cluster_instance', 'vnic']
 
 
 class LogicalVolume(Table):
