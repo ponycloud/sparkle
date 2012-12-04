@@ -37,7 +37,7 @@ AUTOMAGIC_ENDPOINTS = [
     '/host/<uuid:host>/raid/<uuid:raid>/disk/<varchar:disk>',
     '/host/<uuid:host>/bond/<uuid:bond>',
     '/host/<uuid:host>/bond/<uuid:bond>/nic/<varchar:nic>',
-    '/host/<uuid:host>/bond/<uuid:bond>/role/<uuid:nic_role>',
+    '/host/<uuid:host>/bond/<uuid:bond>/nic-role/<uuid:nic_role>',
     '/host/<uuid:host>/disk/<varchar:disk>',
     '/image/<uuid:image>',
     '/switch/<uuid:switch>',

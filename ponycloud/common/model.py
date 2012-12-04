@@ -358,7 +358,7 @@ class Address(Table):
 class Bond(Table):
     name = 'bond'
     indexes = ['host', 'bond_name', 'bridge_name']
-    children = ['nic', 'role']
+    children = ['nic', 'nic_role']
 
 
 class Cluster(Table):
