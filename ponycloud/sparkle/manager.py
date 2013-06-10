@@ -6,6 +6,8 @@ from twisted.internet import task, reactor
 from twisted.internet.threads import deferToThread, blockingCallFromThread
 from twisted.internet.defer import Deferred
 
+from listener import ChangelogListener, ListenerError
+
 from sqlalchemy.exc import OperationalError, DatabaseError
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -135,6 +137,12 @@ class Manager(object):
         """
         self.db = db
         self.router = router
+
+        """
+        Listener for applying changes in database
+        """
+        self.listener = ChangelogListener(db.engine.url)
+        self.listener.listen(self.apply_changes)
 
         # This is where we keep the configuration data.
         self.model = Model()
@@ -279,35 +287,7 @@ class Manager(object):
                 raise PathError('%s/%s not found' % (path[i], keys[path[i]]))
 
 
-    def get_changes(self):
-        """
-        Returns changes in current transaction and flushes the changelog.
-        """
-
-        changes = []
-
-        # Retrieve all changes done by the current transaction.
-        for row in self.db.changelog.order_by(self.db.changelog.id).all():
-            # We need to know the corresponding table in our model.
-            table = self.model[row.entity]
-
-            # Identify the primary key of the row.
-            if row.new_data is None:
-                pkey = table.primary_key(row.old_data)
-            else:
-                pkey = table.primary_key(row.new_data)
-
-            # Create loadable entry.
-            changes.append((row.entity, pkey, 'desired', row.new_data))
-
-        # Changelog needs to be emptied afterwards.
-        # There is a trigger that won't otherwise allow commit.
-        self.db.changelog.delete()
-
-        return changes
-
-
-    def apply_changes(self, changes):
+    def apply_changes(self, data):
         """
         Applies changes to the model and forwards them to Twilights.
 
@@ -316,11 +296,11 @@ class Manager(object):
         """
 
         # Apply the changes to the model.
-        self.model.load(changes)
+        self.model.load(data)
 
         # Sort out which changes should go to which hosts.
         hosts = {}
-        for change in changes:
+        for change in data:
             for h in self.row_to_host.get(change[:2], []):
                 hosts.setdefault(h, []).append(change)
 
@@ -519,15 +499,12 @@ class Manager(object):
 
         recurse(path, keys, value)
 
-        # Get data from the changelog.
-        changes = self.get_changes()
-
         # Attempt to commit the transaction.
         # This is where consistency is checked on the database side.
         self.db.commit()
 
-        # Apply changes to the in-memory model.
-        self.apply_changes(changes)
+        # Make sure we update in-memory desired state.
+        self.listener.poll()
 
         # Return new desired state of the entity.
         return self.model[name][keys[path[-1]]].desired
@@ -557,15 +534,12 @@ class Manager(object):
         entity.filter_by(**{table.pkey: keys[name]})\
                 .delete(synchronize_session=False)
 
-        # Get data from the changelog.
-        changes = self.get_changes()
-
         # Attempt to commit the transaction.
         # This is where consistency is checked on the database side.
         self.db.commit()
 
-        # Apply changes to the in-memory model.
-        self.apply_changes(changes)
+        # Make sure we update in-memory desired state.
+        self.listener.poll()
 
         # Well...
         return None
