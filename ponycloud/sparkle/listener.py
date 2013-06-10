@@ -51,7 +51,10 @@ class ChangelogListener:
                 item = decode(self.conn.notifies.pop().payload)
                 entity, action, pkey = item[:3]
                 payload = decode(item[-1])
-                data.append((entity, payload[pkey], 'desired', payload))
+                if action == 'DELETE':
+                    data.append((entity, payload[pkey], 'desired', None))
+                else:
+                    data.append((entity, payload[pkey], 'desired', payload))
 
             if data:
                 self.callback(data)
