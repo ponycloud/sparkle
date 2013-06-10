@@ -380,7 +380,7 @@ class CPUProfile(Table):
 class Disk(Table):
     name = 'disk'
     pkey = 'id'
-    indexes = ['raid']
+    indexes = ['storage_pool']
     nm_indexes = {'host_disk': ('disk', 'host')}
 
 
@@ -393,7 +393,7 @@ class Host(Table):
     name = 'host'
     nm_indexes = {'host_disk':     ('host', 'disk'),
                   'host_instance': ('host', 'instance')}
-    children = ['nic', 'bond', 'disk', 'raid']
+    children = ['nic', 'bond', 'disk']
 
 class Image(Table):
     name = 'image'
@@ -406,11 +406,6 @@ class Instance(Table):
     indexes = ['cpu_profile', 'tenant']
     nm_indexes = {'host_instance': ('instance', 'host')}
     children = ['vdisk', 'cluster_instance', 'vnic']
-
-
-class LogicalVolume(Table):
-    name = 'logical_volume'
-    indexes = ['storage_pool', 'raid']
 
 
 class Member(Table):
@@ -438,12 +433,6 @@ class NICRole(Table):
 class Quota(Table):
     name = 'quota'
     indexes = ['tenant']
-
-
-class RAID(Table):
-    name = 'raid'
-    indexes = ['host']
-    children = ['logical_volume', 'disk']
 
 
 class Route(Table):
@@ -531,8 +520,8 @@ class HostVolume(Table):
 
 
 TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk,
-          Extent, Host, Image, Instance, LogicalVolume, Member, Network,
-          NIC, NICRole, Quota, RAID, Route, StoragePool, Switch, Tenant,
+          Extent, Host, Image, Instance, Member, Network,
+          NIC, NICRole, Quota, Route, StoragePool, Switch, Tenant,
           TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,
           HostInstance, HostCPUProfile, HostVolume]
 
