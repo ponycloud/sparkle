@@ -357,7 +357,7 @@ class Address(Table):
 
 class Bond(Table):
     name = 'bond'
-    indexes = ['host', 'bond_name', 'bridge_name']
+    indexes = ['host']
     children = ['nic', 'nic_role']
 
 
@@ -422,12 +422,12 @@ class Network(Table):
 class NIC(Table):
     name = 'nic'
     pkey = 'hwaddr'
-    indexes = ['bond', 'nic_name']
+    indexes = ['host', 'bond']
 
 
 class NICRole(Table):
     name = 'nic_role'
-    indexes = ['bond', 'vlan_name', 'bridge_name', 'address']
+    indexes = ['bond', 'address']
 
 
 class Quota(Table):
