@@ -223,7 +223,7 @@ class Manager(object):
     # /def schedule_relate
 
 
-    def twilight_state_update(self, uuid, incarnation, changes, seq, sender):
+    def twilight_update(self, uuid, incarnation, changes, seq, sender):
         """Handler for current state replication from Twilights."""
 
         # Periodically notify new hosts.
@@ -253,7 +253,7 @@ class Manager(object):
 
             if seq > 0:
                 print 'requesting resync with twilight %s' % uuid
-                self.router.send({'event': 'sparkle-resync'}, sender)
+                self.router.send({'event': 'resync'}, sender)
                 host['incarnation'] = incarnation
                 host['inseq'] = 0
                 return
@@ -319,7 +319,7 @@ class Manager(object):
 
         # Send a nice, warm message with all the goodies.
         self.router.send({
-            'event': 'sparkle-state-update',
+            'event': 'update',
             'incarnation': self.incarnation,
             'seq': self.hosts[host]['outseq'],
             'changes': changes,
@@ -339,7 +339,7 @@ class Manager(object):
         self.router.send({
             'incarnation': self.incarnation,
             'seq': 0,
-            'event': 'sparkle-state-update',
+            'event': 'update',
             'changes': changes,
         }, sender)
 

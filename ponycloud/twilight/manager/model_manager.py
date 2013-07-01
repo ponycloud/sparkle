@@ -33,13 +33,13 @@ class ModelManager(object):
         task.LoopingCall(self.apply_changes, []).start(15.0)
 
 
-    def sparkle_state_update(self, incarnation, changes, seq):
+    def sparkle_update(self, incarnation, changes, seq):
         """Handler for desired state replication from Sparkle."""
 
         if self.sparkle_incarnation != incarnation or self.inseq != seq:
             if seq > 0:
                 print 'requesting resync with sparkle'
-                self.sparkle.send({'event': 'twilight-resync',
+                self.sparkle.send({'event': 'resync',
                                    'uuid': self.uuid})
                 self.sparkle_incarnation = incarnation
                 self.inseq = 0
@@ -63,7 +63,7 @@ class ModelManager(object):
             'uuid': self.uuid,
             'incarnation': self.incarnation,
             'seq': 0,
-            'event': 'twilight-state-update',
+            'event': 'update',
             'changes': self.model.dump(['current']),
         })
         self.outseq = 1
@@ -81,7 +81,7 @@ class ModelManager(object):
             'uuid': self.uuid,
             'incarnation': self.incarnation,
             'seq': self.outseq,
-            'event': 'twilight-state-update',
+            'event': 'update',
             'changes': changes,
         })
         self.outseq += 1
