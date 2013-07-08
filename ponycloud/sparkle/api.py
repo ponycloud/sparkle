@@ -13,6 +13,8 @@ from twisted.internet import reactor
 
 from werkzeug.exceptions import BadRequest, InternalServerError, NotFound
 from ponycloud.common.rest import Flaskful
+from ponycloud.common.auth import get_token
+
 from flask import request
 
 from ponycloud.sparkle.manager import ManagerError, UserError, PathError
@@ -172,6 +174,12 @@ def make_sparkle_app(manager):
             'application': 'Sparkle',
             'capabilities': [],
         }
+
+    # Generate token endpoint
+    @app.route_json('/token')
+    @app.requires_auth(manager)
+    def token(username):
+        return get_token(username)
 
     # Simple reflection of the data endpoints.
     @app.route_json('/_endpoints')

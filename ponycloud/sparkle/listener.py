@@ -21,17 +21,24 @@ class ChangelogListener:
         """
         self.conn = psycopg2.connect(str(conn_string))
         self.listener = False
-        self.callback = lambda *args: None
+        self.callbacks = []
 
-    def listen(self, callback, interval=0.2):
+    def listen(self, interval=0.2):
         """
         Start listening and passing the results
         to callback after a certain interval passes
         """
         self._start()
-        self.callback = callback
         self.listener = task.LoopingCall(self.poll)
         self.listener.start(interval)
+
+    def add_callback(self, callback):
+        """
+        Register another callback which should be fired
+        on any event from db
+        """
+        if hasattr(callback, '__call__'):
+            self.callbacks.append(callback)
 
     def stop(self):
         if self.listener:
@@ -57,7 +64,8 @@ class ChangelogListener:
                     data.append((entity, payload[pkey], 'desired', payload))
 
             if data:
-                self.callback(data)
+                for callback in self.callbacks:
+                    callback(data)
 
 # vim:set sw=4 ts=4 et:
 # -*- coding: utf-8 -*-

@@ -7,6 +7,7 @@ from twisted.internet.threads import deferToThread, blockingCallFromThread
 from twisted.internet.defer import Deferred
 
 from listener import ChangelogListener, ListenerError
+from notifier import Notifier
 
 from sqlalchemy.exc import OperationalError, DatabaseError
 from sqlalchemy.orm.exc import NoResultFound
@@ -131,7 +132,7 @@ class Manager(object):
     The main application logic of Sparkle.
     """
 
-    def __init__(self, router, db):
+    def __init__(self, router, db, notifier, authkeys):
         """
         Stores the event sinks for later use.
         """
@@ -142,10 +143,13 @@ class Manager(object):
         Listener for applying changes in database
         """
         self.listener = ChangelogListener(db.engine.url)
-        self.listener.listen(self.apply_changes)
+        self.listener.add_callback(self.apply_changes)
+        self.listener.listen()
 
         # This is where we keep the configuration data.
         self.model = Model()
+
+        self.notifier = notifier
 
         #
         # In addition to the configuration, we keep some info about hosts.
@@ -217,6 +221,9 @@ class Manager(object):
             self.model.load(old_model.dump(['current']))
             self.incarnation = uuidgen()
             self.add_watches()
+
+            self.notifier.load(self.model)
+            self.notifier.start()
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
