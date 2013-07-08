@@ -302,14 +302,19 @@ class Manager(object):
         so make sure you only update desired state through here.
         """
 
-        # Apply the changes to the model.
-        self.model.load(data)
+        # Apply non-delete changes to the model,
+        # so that we know how new rows map to individual hosts.
+        self.model.load([ch for ch in data if ch[3]])
 
         # Sort out which changes should go to which hosts.
         hosts = {}
         for change in data:
             for h in self.row_to_host.get(change[:2], []):
                 hosts.setdefault(h, []).append(change)
+
+        # Apply deletion changes to the model after assesing what hosts
+        # to send notifications to.  The host-row mappings are removed here.
+        self.model.load([ch for ch in data if not ch[3]])
 
         # Send the change bulks.
         for host, ch in hosts.items():
