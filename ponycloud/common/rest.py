@@ -2,9 +2,11 @@
 
 __all__ = ['Flaskful', 'json_response']
 
-from flask import Flask, make_response, request
+from flask import Flask, Response, make_response, request
 
 from traceback import print_exc
+
+from auth import check_auth
 
 from functools import wraps
 from simplejson import dumps
@@ -13,9 +15,12 @@ def json_response(data, status=200):
     """
     Creates JSON response object from given structure.
     """
-    resp = make_response(dumps(data, indent=2) + '\n', status)
-    resp.headers['Content-Type'] = 'application/json'
-    return resp
+    if isinstance(data, Response):
+        return data
+    else:
+        resp = make_response(dumps(data, indent=2) + '\n', status)
+        resp.headers['content-type'] = 'application/json'
+        return resp
 
 
 class Flaskful(Flask):
@@ -64,6 +69,27 @@ class Flaskful(Flask):
                 return json_response(fn(*args, **kwargs))
             return wrapper
         return wrap
+
+    def authenticate(self):
+        """
+        Sends a 401 response that enables basic auth
+        """
+        return Response(
+        'Could not verify your access level for that URL.\n'
+        'You have to login with proper credentials', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+    def requires_auth(self, manager):
+        def wrap(f):
+            @wraps(f)
+            def wrapper(*args, **kwargs):
+                username = check_auth(request.headers.get("Authorization"), manager)
+                if username is False:
+                    return self.authenticate()
+                return f(username, *args, **kwargs)
+            return wrapper
+        return wrap
+
 
 
 # vim:set sw=4 ts=4 et:
