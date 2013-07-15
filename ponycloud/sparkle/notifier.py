@@ -19,7 +19,7 @@ class Notifier(WampServerFactory):
     def _model_handler(self, table, row):
         #TODO Need to know to whom we need to talk
         self.publish('76764219-6bd4-4278-8b7b-659fc43c939e', 
-                {'type': table.name, 'desired': row.desired, 'current': row.current})
+                {'type': table.name, 'pkey-name': table.pkey, 'pkey': row.pkey, 'desired': row.desired, 'current': row.current})
 
     def start(self):
         for item in self.model:
