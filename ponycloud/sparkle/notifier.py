@@ -26,21 +26,22 @@ class Notifier(WampServerFactory):
             self.model[item].on_after_row_update(self._model_handler)
         listenWS(self)
 
-    def get_permissions(self, tenant_uuid):
-
-        tenant = self.model['tenant'][tenant_uuid]
-        if tenant is None:
+    def get_permissions(self, username):
+        tenants = []
+        rows = self.model['member'].list(user=username)
+        if rows is None:
             return None
+        for row in rows:
+            tenants.append(row.desired['tenant'])
+
         else:
-            pubsub = {'uri': '{}/{}'.format(self.topic_uri,tenant.desired['uuid']),
-                                   'prefix': True,
-                                   'pub': False,
-                                   'sub': True}
-            return { tenant.desired['uuid']: {'pubsub': [pubsub]} }
-
-    def get_secret(self, tenant):
-        return 'secret'
-
+            pubsub = []
+            for tenant in tenants:
+                pubsub.append({'uri': '{}/{}'.format(self.topic_uri,tenant),
+                                       'prefix': True,
+                                       'pub': False,
+                                       'sub': True})
+            return { username: {'pubsub': pubsub} }
 
 class NotificationsProtocol(WampCraServerProtocol):
     """
@@ -55,25 +56,24 @@ class NotificationsProtocol(WampCraServerProtocol):
                                self,
                                NotificationsProtocol.auth)
 
-    def getAuthPermissions(self, authKey):
+    def getAuthPermissions(self, username):
       ## return permissions which will be granted for the auth key
       ## when the authentication succeeds
-      permissions = self.factory.get_permissions(authKey)
+      permissions = self.factory.get_permissions(username)
       if permissions is None:
           return None
       else:
           return {'permissions': permissions}
 
-    def getAuthSecret(self, authKey):
-      return self.factory.get_secret(authKey)
-
     def auth(self, token):
         if token is None:
             return None
         if verify_token(token):
+            # TODO Many things could go wrong here
+            username = token[0].split(':')[1]
             self._clientAuthenticated = True
-            self.onAuthenticated(token[0])
-            return self.getAuthPermissions(token[0])
+            self.onAuthenticated(username)
+            return self.getAuthPermissions(username)
 
     def onAuthenticated(self, authKey):
       ## register PubSub topics from the auth permissions

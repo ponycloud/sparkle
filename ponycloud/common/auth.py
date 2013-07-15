@@ -74,8 +74,8 @@ def check_auth(header, manager):
                 else:
                     # Wrong password
                     return False
-            except KeyError:
-                # User does not exist
+            except (KeyError, ValueError):
+                # User does not exist or something strange happened
                 return False
         elif type == 'Token':
             token = cjson.decode(content)
