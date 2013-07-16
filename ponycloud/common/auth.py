@@ -9,6 +9,8 @@ import time
 from hmac import new as hmac
 from hashlib import sha256
 
+import base64
+
 from functools import wraps
 from flask import request, Response
 
@@ -16,10 +18,7 @@ import cjson
 
 __all__ = ['check_auth', 'get_token', 'verify_token', 'requires_auth']
 
-key = 'top_secret'
-
-
-def get_token(username):
+def get_token(username, key):
     """ Creates a new token for given username """
 
     # Generate salt
@@ -31,27 +30,27 @@ def get_token(username):
     # Assemble message
     message = ":".join([str(valid_to), username])
 
-    # Compute HMAC of the message and secret key
-    h = hmac(key, message, sha256).hexdigest()
+    # Compute temporary key specific to this message.
+    tmp_key = hmac(key, salt, sha256).digest()
 
-    # scrypt hash for aditional security
-    signature = scrypt.hash(h, salt, buflen=16).encode('hex').strip()
+    # Compute HMAC of the message and secret key
+    signature = hmac(tmp_key, message, sha256).hexdigest()
+
     return (message, salt.encode('hex'), signature)
 
-def verify_token(token):
+def verify_token(token, key):
     """ Verifies if given token is valid """
 
     # Retrieve info from the token
     salt = token[1].decode('hex')
     validity, username = token[0].split(':', 1)
     # Verify validity
-    if validity < time.time():
+    if int(validity) < int(time.time()):
         return False
-
     # Compute HMAC...
-    h = hmac(key, token[0], sha256).hexdigest()
-    # ...and scrypt hash
-    signature = scrypt.hash(h, salt, buflen=16).encode('hex').strip()
+    tmp_key = hmac(key, salt, sha256).digest()
+
+    signature = hmac(tmp_key, token[0], sha256).hexdigest()
 
     return signature == token[2]
 
@@ -62,7 +61,7 @@ def check_auth(header, manager):
     """
     try:
         type, content = header.split()
-        content = content.decode('base_64')
+        content = base64.b64decode(content)
         if type == 'Basic':
             username, password = content.split(":")
             # Verify credentials against database, scrypt.hash passwords
@@ -74,16 +73,19 @@ def check_auth(header, manager):
                 else:
                     # Wrong password
                     return False
-            except (KeyError, ValueError):
+            except (TypeError, KeyError):
                 # User does not exist or something strange happened
                 return False
         elif type == 'Token':
-            token = cjson.decode(content)
-            if verify_token(token):
-                username = token[0].split(':', 1)[1]
-                return username
-            else:
-                # Invalid token
+            try:
+                token = cjson.decode(content)
+                if verify_token(token, manager.authkeys['passkey']):
+                    username = token[0].split(':', 1)[1]
+                    return username
+                else:
+                    # Invalid token
+                    return False
+            except:
                 return False
     except AttributeError:
         return False

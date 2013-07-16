@@ -139,6 +139,9 @@ class Manager(object):
         self.db = db
         self.router = router
 
+
+        self.authkeys = authkeys
+
         """
         Listener for applying changes in database
         """

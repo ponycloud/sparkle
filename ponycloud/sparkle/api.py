@@ -24,7 +24,7 @@ from functools import wraps
 
 import cjson
 import re
-
+import base64
 
 AUTOMAGIC_ENDPOINTS = [
     '/disk/<varchar:disk>',
@@ -179,7 +179,8 @@ def make_sparkle_app(manager):
     @app.route_json('/token')
     @app.requires_auth(manager)
     def token(username):
-        return get_token(username)
+        token = get_token(username, manager.authkeys['passkey'])
+        return base64.b64encode(cjson.encode(token))
 
     # Simple reflection of the data endpoints.
     @app.route_json('/_endpoints')
