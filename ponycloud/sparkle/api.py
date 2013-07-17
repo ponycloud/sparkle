@@ -180,7 +180,7 @@ def make_sparkle_app(manager):
     @app.requires_auth(manager)
     def token(username):
         token = get_token(username, manager.authkeys['passkey'])
-        return base64.b64encode(cjson.encode(token))
+        return {'token': base64.b64encode(cjson.encode(token))}
 
     # Simple reflection of the data endpoints.
     @app.route_json('/_endpoints')
