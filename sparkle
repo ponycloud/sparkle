@@ -32,6 +32,7 @@ if __name__ == '__main__':
 
         # Prepare the WS notifier
         notifier = Notifier(config.get('ws', 'url'), debugWamp=True)
+        notifier.passkey = config.get('auth', 'passkey')
 
         # Prepare the manager that takes care of business logic.
         manager = Manager(router, db, notifier, dict(config.items('auth')))

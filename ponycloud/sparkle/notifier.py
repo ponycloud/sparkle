@@ -4,15 +4,19 @@ from autobahn.wamp import WampServerFactory, \
                           exportRpc
 from autobahn.websocket import listenWS
 from ponycloud.common.auth import verify_token
+import base64
+import cjson
 
 __all__ = ['Notifier']
 class Notifier(WampServerFactory):
 
+    # Used for model lazy loading
     def load(self, model):
         self.model = model
         self.protocol = NotificationsProtocol
         self.topic_uri = '[ponycloud:notifications]'
 
+    # Call this method to send something to certain tenant
     def publish(self, tenant_uuid, event):
         self.dispatch('{}/{}'.format(self.topic_uri, tenant_uuid), event)
 
@@ -26,6 +30,8 @@ class Notifier(WampServerFactory):
             self.model[item].on_after_row_update(self._model_handler)
         listenWS(self)
 
+    # Function for determining permissions for given username
+    # TODO Now it's just a list of tenants the user is member of
     def get_permissions(self, username):
         tenants = []
         rows = self.model['member'].list(user=username)
@@ -68,7 +74,8 @@ class NotificationsProtocol(WampCraServerProtocol):
     def auth(self, token):
         if token is None:
             return None
-        if verify_token(token):
+        token = cjson.decode(base64.b64decode(token))
+        if verify_token(token, self.factory.passkey):
             # TODO Many things could go wrong here
             username = token[0].split(':')[1]
             self._clientAuthenticated = True
