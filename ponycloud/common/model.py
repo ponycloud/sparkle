@@ -83,6 +83,9 @@ class Table(dict):
     # List of child tables. Contains only names.
     children = []
 
+    # List of roles allowed by default
+    allowed_roles = ['owner', 'admin', 'operator']
+
 
     def __init__(self):
         """Prepare internal data structures of the table."""
@@ -99,7 +102,7 @@ class Table(dict):
         self.create_state_callbacks = []
         self.update_state_callbacks = []
         self.delete_state_callbacks = []
-
+        self.before_delete_state_callbacks = []
 
     @classmethod
     def primary_key(cls, row):
@@ -108,6 +111,16 @@ class Table(dict):
             return tuple([row[k] for k in cls.pkey])
         return row[cls.pkey]
 
+    def get_allowed(self, index, model):
+        """ Default implementation of allowed tenants"""
+        try:
+            row = self[index]
+            if 'tenant' in row.desired:
+                return {row.desired['tenant']: self.allowed_roles}
+            else:
+                return {}
+        except:
+            return {}
 
     def add_watches(self, model):
         """Called to give table chance to watch other tables."""
@@ -163,7 +176,7 @@ class Table(dict):
 
 
     def on_delete_state(self, callback, states=['desired', 'current']):
-        """Register function to call after a state is deleted."""
+        """register function to call after a state is deleted."""
         for rec in self.delete_state_callbacks:
             if rec['callback'] == callback:
                 rec['states'] = states
@@ -171,6 +184,17 @@ class Table(dict):
 
         self.delete_state_callbacks.append({'callback': callback,
                                             'states': states})
+
+    def on_before_delete_state(self, callback, states=['desired', 'current']):
+        """register function to call after a state is deleted."""
+        for rec in self.before_delete_state_callbacks:
+            if rec['callback'] == callback:
+                rec['states'] = states
+                return
+
+        self.before_delete_state_callbacks.append({'callback': callback,
+                                                   'states': states})
+
 
 
     def update_row(self, pkey, state, part):
@@ -200,6 +224,11 @@ class Table(dict):
 
         if part is None:
             if getattr(row, state) is not None:
+                # Fire callbacks just before delete
+                for rec in self.before_delete_state_callbacks:
+                    if state in rec['states']:
+                        rec['callback'](self, row)
+
                 state_callbacks = self.delete_state_callbacks
             setattr(row, state, None)
         else:
@@ -256,7 +285,6 @@ class Table(dict):
         # None here means all rows, so that we don't have to maintain
         # redundant index of all primary keys.
         selection = None
-
         for k, v in keys.items():
             if k not in self.index and k not in self.nm_index:
                 continue
@@ -302,6 +330,8 @@ class Row(object):
         self.desired = None
         self.current = None
 
+    def get_allowed(self, table, model):
+            return table.get_allowed(self.pkey, model)
 
     def get_current(self, key, default=None):
         """Get value for given key in the current state."""

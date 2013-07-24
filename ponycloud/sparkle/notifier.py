@@ -20,20 +20,37 @@ class Notifier(WampServerFactory):
     def publish(self, tenant_uuid, event):
         self.dispatch('{}/{}'.format(self.topic_uri, tenant_uuid), event)
 
-    def _model_handler(self, table, row):
-        #TODO Need to know to whom we need to talk
-        self.publish('76764219-6bd4-4278-8b7b-659fc43c939e', 
-                {'type': table.name, 'pkey-name': table.pkey, 'pkey': row.pkey, 'desired': row.desired, 'current': row.current})
 
     def start(self):
+        def make_model_handler(operation):
+            def model_handler(table, row):
+                allowed = row.get_allowed(table, self.model)
+                to_publish = {'operation': operation,
+                            'type': table.name,
+                            'pkey-name': table.pkey,
+                            'pkey': row.pkey,
+                            'desired': row.desired,
+                            'current': row.current}
+                # Publish event to all interested tenants
+                for channel in allowed:
+                    self.publish(channel, to_publish)
+                # ...and report to alicorns
+                self.publish('alicorns', to_publish)
+            return model_handler
+
         for item in self.model:
-            self.model[item].on_after_row_update(self._model_handler)
+            self.model[item].on_create_state(make_model_handler('create'))
+            self.model[item].on_update_state(make_model_handler('update'))
+            self.model[item].on_before_delete_state(make_model_handler('delete'))
         listenWS(self)
 
     # Function for determining permissions for given username
     # TODO Now it's just a list of tenants the user is member of
     def get_permissions(self, username):
         tenants = []
+        # Determine if user is alicorn or not
+        alicorn = self.model['user'][username].desired['alicorn']
+        # Get users membership
         rows = self.model['member'].list(user=username)
         if rows is None:
             return None
@@ -47,6 +64,12 @@ class Notifier(WampServerFactory):
                                        'prefix': True,
                                        'pub': False,
                                        'sub': True})
+            if alicorn:
+                pubsub.append({'uri': '{}/{}'.format(self.topic_uri,'alicorns'),
+                                       'prefix': True,
+                                       'pub': False,
+                                       'sub': True})
+ 
             return { username: {'pubsub': pubsub} }
 
 class NotificationsProtocol(WampCraServerProtocol):

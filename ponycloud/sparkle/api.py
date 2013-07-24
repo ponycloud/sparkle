@@ -25,6 +25,7 @@ from functools import wraps
 import cjson
 import re
 import base64
+import time
 
 AUTOMAGIC_ENDPOINTS = [
     '/disk/<varchar:disk>',
@@ -179,8 +180,9 @@ def make_sparkle_app(manager):
     @app.route_json('/token')
     @app.requires_auth(manager)
     def token(username):
-        token = get_token(username, manager.authkeys['passkey'])
-        return {'token': base64.b64encode(cjson.encode(token))}
+        validity = 3600
+        token = get_token(username, manager.authkeys['passkey'], validity)
+        return {'token': base64.b64encode(cjson.encode(token)), 'validity': int(time.time() + validity)}
 
     # Simple reflection of the data endpoints.
     @app.route_json('/_endpoints')

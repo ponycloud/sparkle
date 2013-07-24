@@ -18,14 +18,14 @@ import cjson
 
 __all__ = ['check_auth', 'get_token', 'verify_token', 'requires_auth']
 
-def get_token(username, key):
+def get_token(username, key, validity=3600):
     """ Creates a new token for given username """
 
     # Generate salt
     salt = os.urandom(16)
 
     # Set validity
-    valid_to = int(time.time() + 3600)
+    valid_to = int(time.time() + validity)
 
     # Assemble message
     message = ":".join([str(valid_to), username])

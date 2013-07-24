@@ -139,7 +139,7 @@ class Manager(object):
         self.db = db
         self.router = router
 
-
+        # Authkeys from configuration are stored here
         self.authkeys = authkeys
 
         """
@@ -152,6 +152,7 @@ class Manager(object):
         # This is where we keep the configuration data.
         self.model = Model()
 
+        # This is how we notify users via websockets
         self.notifier = notifier
 
         #
@@ -417,10 +418,9 @@ class Manager(object):
         """
         Called from API to obtain entity description.
         """
-
         # Validate path leading to the entity for access control.
         self.validate_path(path, keys)
-
+        print path
         try:
             name = path[-1]
             return self.model[name][keys[name]].to_dict()
