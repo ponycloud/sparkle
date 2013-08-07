@@ -83,10 +83,6 @@ class Table(dict):
     # List of child tables. Contains only names.
     children = []
 
-    # List of roles allowed by default
-    allowed_roles = ['owner', 'admin', 'operator']
-
-
     def __init__(self):
         """Prepare internal data structures of the table."""
 
@@ -111,16 +107,16 @@ class Table(dict):
             return tuple([row[k] for k in cls.pkey])
         return row[cls.pkey]
 
-    def get_allowed(self, index, model):
-        """ Default implementation of allowed tenants"""
-        try:
-            row = self[index]
-            if 'tenant' in row.desired:
-                return {row.desired['tenant']: self.allowed_roles}
-            else:
-                return {}
-        except:
-            return {}
+    def get_allowed(self, pkey, model):
+        """ Default implementation"""
+        return {'tenants': self._get_allowed_tenants(pkey, model)}
+
+    def _get_allowed_tenants(self, pkey, model):
+        """ Default implementation """
+        row = self[pkey]
+        if row.desired and 'tenant' in row.desired:
+            return [row.desired['tenant']]
+        return []
 
     def add_watches(self, model):
         """Called to give table chance to watch other tables."""
@@ -165,7 +161,7 @@ class Table(dict):
                                             'states': states})
 
     def on_update_state(self, callback, states=['desired', 'current']):
-        """Register function to call after a state is updated."""
+        """register function to call after a state is updated."""
         for rec in self.update_state_callbacks:
             if rec['callback'] == callback:
                 rec['states'] = states
@@ -384,6 +380,15 @@ class Address(Table):
     name = 'address'
     indexes = ['network', 'vnic']
 
+    def _get_allowed_tenants(self, pkey, model):
+        """ Tenant that owns the switch this network is in """
+        row = self[pkey]
+        if row.desired:
+            vnic = model['vnic'][row.desired['vnic']]
+
+            return [model['instance'][vnic.desired['instance']].desired['tenant']]
+        return []
+
 
 class Bond(Table):
     name = 'bond'
@@ -401,10 +406,22 @@ class ClusterInstance(Table):
     name = 'cluster_instance'
     indexes = ['cluster', 'instance']
 
+    def _get_allowed_tenants(self, pkey, model):
+        """ Tenant that owns the switch this network is in """
+        row = self[pkey]
+        if row.desired:
+            return [model['cluster'][row.desired['cluster']]]
+        return []
+
 
 class CPUProfile(Table):
     name = 'cpu_profile'
     nm_indexes = {'host_cpu_profile': ('cpu_profile', 'host')}
+
+
+class Config(Table):
+    name = 'config'
+    pkey = 'key'
 
 
 class Disk(Table):
@@ -418,6 +435,11 @@ class Extent(Table):
     name = 'extent'
     indexes = ['volume', 'storage_pool']
 
+
+class Event(Table):
+    name = 'event'
+    pkey = 'hash'
+    indexes = ['host', 'instance']
 
 class Host(Table):
     name = 'host'
@@ -448,6 +470,13 @@ class Network(Table):
     indexes = ['switch']
     children = ['route']
 
+    def _get_allowed_tenants(self, pkey, model):
+        """ Tenant that owns the switch this network is in """
+        row = self[pkey]
+        if row.desired:
+            return [model['switch'][row.desired['switch']].desired['tenant']]
+        return []
+
 
 class NIC(Table):
     name = 'nic'
@@ -468,6 +497,14 @@ class Quota(Table):
 class Route(Table):
     name = 'route'
     indexes = ['network']
+
+    def _get_allowed_tenants(self, pkey, model):
+        """ Route -> Network -> Switch -> Tenant """
+        row = self[pkey]
+        if row.desired:
+            network = model['network'][row.desired['network']]
+            return [model['switch'][network.desired['switch']].desired['tenant']]
+        return []
 
 
 class StoragePool(Table):
@@ -515,6 +552,14 @@ class VNIC(Table):
     name = 'vnic'
     indexes = ['instance', 'switch']
     children = ['address', 'switch']
+
+    def _get_allowed_tenants(self, pkey, model):
+        """ Tenant that owns particular instance """
+        row = self[pkey]
+        if row.desired:
+            return [model['instance'][row.desired['instance']].desired['tenant']]
+        return []
+
 
 class Volume(Table):
     name = 'volume'

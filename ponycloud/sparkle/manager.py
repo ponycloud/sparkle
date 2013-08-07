@@ -420,7 +420,6 @@ class Manager(object):
         """
         # Validate path leading to the entity for access control.
         self.validate_path(path, keys)
-        print path
         try:
             name = path[-1]
             return self.model[name][keys[name]].to_dict()
