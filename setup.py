@@ -11,7 +11,6 @@ setup(
     keywords = 'cloud management',
     url = 'http://github.com/ponycloud/python-ponycloud',
     packages=['ponycloud',
-              'ponycloud.twilight',
               'ponycloud.luna',
               'ponycloud.sparkle',
               'ponycloud.celly',
@@ -21,7 +20,7 @@ setup(
         'Topic :: System :: Distributed Computing',
         'License :: OSI Approved :: MIT License',
     ],
-    scripts=['luna', 'twilight', 'sparkle']
+    scripts=['luna', 'sparkle']
 )
 
 
