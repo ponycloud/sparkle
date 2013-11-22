@@ -1,5 +1,4 @@
 #!/usr/bin/python -tt
-from block.dm import table
 
 import jsonpatch
 import re
