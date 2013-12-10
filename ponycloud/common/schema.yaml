@@ -1,145 +1,121 @@
 %YAML 1.2
 ---
 address:
-  owner: [vnic, vnic]
   parents:
     - [network, network]
     - [vnic, vnic]
   pkey: uuid
 
 bond:
-  owner: null
   parents:
     - [host, host]
   pkey: uuid
 
 cluster:
-  owner: [tenant, tenant]
   parents:
     - [tenant, tenant]
   pkey: uuid
 
 cluster_instance:
-  owner: [cluster, cluster]
   parents:
     - [cluster, cluster]
     - [instance, instance]
   pkey: uuid
 
 config:
-  owner: null
   parents: []
   pkey: key
 
 cpu_profile:
-  owner: null
   parents: []
   pkey: uuid
   public: true
 
 disk:
-  owner: null
   parents:
     - [storage_pool, storage_pool]
-    - [disk, disk]
   pkey: id
 
 event:
-  owner: [instance, instance]
   parents:
     - [host, host]
     - [instance, instance]
   pkey: hash
 
 extent:
-  owner: null
   parents:
     - [storage_pool, storage_pool]
     - [volume, volume]
   pkey: uuid
 
 host:
-  owner: null
   parents: []
   pkey: uuid
 
 image:
-  owner: [tenant, tenant]
   parents:
     - [tenant, tenant]
   pkey: uuid
   public: true
 
 instance:
-  owner: [tenant, tenant]
   parents:
     - [cpu_profile, cpu_profile]
     - [tenant, tenant]
   pkey: uuid
 
 member:
-  owner: [tenant, tenant]
   parents:
     - [tenant, tenant]
     - [user, user]
   pkey: uuid
 
 network:
-  owner: [switch, switch]
   parents:
     - [switch, switch]
   pkey: uuid
   public: true
 
 nic:
-  owner: null
   parents:
     - [host, host]
     - [bond, bond]
   pkey: hwaddr
 
 nic_role:
-  owner: null
   parents:
     - [bond, bond]
   pkey: uuid
 
 quota:
-  owner: null
   parents:
     - [tenant, tenant]
   pkey: uuid
 
 route:
-  owner: [network, network]
   parents:
     - [network, network]
   pkey: uuid
 
 storage_pool:
-  owner: null
   parents: []
   pkey: uuid
   public: true
 
 switch:
-  owner: [tenant, tenant]
   parents:
     - [tenant, tenant]
   pkey: uuid
 
 tenant:
-  owner: null
   parents: []
   pkey: uuid
 
 user:
-  owner: null
   parents: []
   pkey: email
 
 vdisk:
-  owner: [instance, instance]
   parents:
     - [instance, instance]
     - [volume, volume]
@@ -147,14 +123,12 @@ vdisk:
   pkey: uuid
 
 vnic:
-  owner: [instance, instance]
   parents:
     - [instance, instance]
     - [switch, switch]
   pkey: uuid
 
 volume:
-  owner: [tenant, tenant]
   parents:
     - [storage_pool, storage_pool]
     - [tenant, tenant]

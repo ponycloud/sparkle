@@ -9,24 +9,10 @@ patternProperties:
     type: object
 
     required:
-      - owner
       - parents
       - pkey
 
     properties:
-      owner:
-        title: Owner Relation
-        description: Name of the local column and a remote table.
-          Rows in the remote table "own" matching rows in the local table.
-          This information is critical for correct access control.
-
-        type: ['null', 'array']
-        minItems: 2
-        maxItems: 2
-        items:
-          &String
-            type: string
-
       parents:
         title: Parent Relation
         description: Array of local column and remote table names that can
@@ -38,7 +24,9 @@ patternProperties:
           type: array
           minItems: 2
           maxItems: 2
-          items: *String
+          items:
+            &String
+              type: string
 
       pkey:
         title: Primary Key

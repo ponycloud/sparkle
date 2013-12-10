@@ -1,0 +1,67 @@
+%YAML 1.2
+---
+type: array
+items:
+  oneOf:
+    - type: object
+      additionalProperties: false
+      required: [op, path, value]
+      properties:
+        op:
+          type: string
+          pattern: ^test$
+        path:
+          &Path
+            type: string
+            format: ^/([^~]+|~[01])*$
+        value: &Value {}
+
+    - type: object
+      additionalProperties: false
+      required: [op, path]
+      properties:
+        op:
+          type: string
+          pattern: ^remove$
+        path: *Path
+
+    - type: object
+      additionalProperties: false
+      required: [op, path, value]
+      properties:
+        op:
+          type: string
+          pattern: ^add$
+        path: *Path
+        value: *Value
+
+    - type: object
+      additionalProperties: false
+      required: [op, path, value]
+      properties:
+        op:
+          type: string
+          pattern: ^replace$
+        path: *Path
+        value: *Value
+
+    - type: object
+      additionalProperties: false
+      required: [op, path, from]
+      properties:
+        op:
+          type: string
+          pattern: ^move$
+        path: *Path
+        from: *Path
+
+    - type: object
+      additionalProperties: false
+      required: [op, path, from]
+      properties:
+        op:
+          type: string
+          pattern: ^copy$
+        path: *Path
+        from: *Path
+
