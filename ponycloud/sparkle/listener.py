@@ -2,7 +2,7 @@
 
 import select, psycopg2, psycopg2.extensions
 from twisted.internet import reactor, task
-from cjson import decode, encode
+from simplejson import loads
 
 __all__ = ['ChangelogListener']
 
@@ -55,9 +55,9 @@ class ChangelogListener:
             self.conn.poll()
 
             while self.conn.notifies:
-                item = decode(self.conn.notifies.pop().payload)
+                item = loads(self.conn.notifies.pop().payload)
                 entity, action, pkey = item[:3]
-                payload = decode(item[-1])
+                payload = loads(item[-1])
                 if action == 'DELETE':
                     data.append((entity, payload[pkey], 'desired', None))
                 else:

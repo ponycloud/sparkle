@@ -5,8 +5,7 @@ __all__ = []
 from psycopg2.extensions import *
 from sqlalchemy.types import UserDefinedType
 from sqlalchemy.dialects.postgresql.base import ischema_names
-
-import cjson
+from simplejson import loads, dumps
 
 def make_transparent_type(name):
     class TransparentType(UserDefinedType):
@@ -35,7 +34,7 @@ register_type(new_array_type((1041,), 'INETARRAY', UNICODE))
 def cast_json(value, cur):
     if value is None:
         return None
-    return cjson.decode(value)
+    return loads(value)
 
 # Make JSON types.
 JSON = new_type((114,), "JSON", cast_json)
@@ -47,7 +46,7 @@ register_type(JSONARRAY)
 
 # Converts dict passed to psycopg2 to JSON string.
 def adapt_dict(value):
-    return QuotedString(cjson.encode(value))
+    return QuotedString(dumps(value))
 
 # Register dict->json adapter.
 register_adapter(dict, adapt_dict)

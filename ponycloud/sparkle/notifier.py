@@ -1,15 +1,13 @@
 #!/usr/bin/python -tt
-from autobahn.wamp import WampServerFactory, \
-                          WampCraServerProtocol, \
-                          exportRpc
+
+from autobahn.wamp import WampServerFactory, WampCraServerProtocol, exportRpc
 from autobahn.websocket import listenWS
 from ponycloud.common.auth import verify_token
-import base64
-import cjson
+from simplejson import loads
 
 __all__ = ['Notifier']
-class Notifier(WampServerFactory):
 
+class Notifier(WampServerFactory):
     # Used for model lazy loading
     def load(self, model):
         self.model = model
@@ -19,7 +17,6 @@ class Notifier(WampServerFactory):
     # Call this method to send something to certain tenant
     def publish(self, tenant_uuid, event):
         self.dispatch('{}/{}'.format(self.topic_uri, tenant_uuid), event)
-
 
     def start(self):
         def make_model_handler(operation):
@@ -69,7 +66,7 @@ class Notifier(WampServerFactory):
                                        'prefix': True,
                                        'pub': False,
                                        'sub': True})
- 
+
             return { username: {'pubsub': pubsub} }
 
 class NotificationsProtocol(WampCraServerProtocol):
@@ -97,7 +94,9 @@ class NotificationsProtocol(WampCraServerProtocol):
     def auth(self, token):
         if token is None:
             return None
-        token = cjson.decode(base64.b64decode(token))
+
+        token = loads(token.decode('base64'))
+
         if verify_token(token, self.factory.passkey):
             # TODO Many things could go wrong here
             username = token[0].split(':')[1]

@@ -3,11 +3,11 @@
 __all__ = ['Router']
 
 import zmq
-import cjson
 
 from twisted.internet import reactor
 from twisted.internet.interfaces import IFileDescriptor, IReadDescriptor
 from zope.interface import implements
+from simplejson import loads, dumps
 from time import time
 
 from ponycloud.common.util import uuidgen
@@ -65,7 +65,7 @@ class Router(object):
                     sender, data, t = self.socket.recv_multipart(zmq.NOBLOCK)
                     if int(t) + 15 < time():
                         continue
-                    self.on_message(cjson.decode(data), sender)
+                    self.on_message(loads(data), sender)
                 except zmq.ZMQError, e:
                     if e.errno == zmq.EAGAIN:
                         break
@@ -98,7 +98,7 @@ class Router(object):
             recipient = self.default_recipient
 
         # Send the message.
-        self.socket.send_multipart([recipient, cjson.encode(message), str(int(time()))])
+        self.socket.send_multipart([recipient, dumps(message), str(int(time()))])
 
         # Check for potential replies.
         # This is absolutely essential to do, because Twisted is going to

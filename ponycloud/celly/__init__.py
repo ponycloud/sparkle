@@ -5,7 +5,7 @@ __all__ = ['Celly']
 from httplib2 import Http
 from os.path import dirname
 
-import cjson
+from simplejson import loads, dumps
 import re
 
 
@@ -45,7 +45,7 @@ class CollectionProxy(object):
         return out
 
     def post(self, desired):
-        result = self.celly.request(self.uri, 'POST', cjson.encode(desired))
+        result = self.celly.request(self.uri, 'POST', dumps(desired))
         child_uri = '%s%s' % (self.uri, guess_key({'desired': result}))
         return EntityProxy(self.celly, child_uri, self.children)
 
@@ -73,7 +73,7 @@ class EntityProxy(object):
 
     @desired.setter
     def desired(self, value):
-        self.celly.request(self.uri, 'PUT', cjson.encode(value))
+        self.celly.request(self.uri, 'PUT', dumps(value))
 
     @property
     def current(self):
@@ -111,7 +111,7 @@ class Celly(object):
                                               headers=headers)
 
         if status['content-type'] == 'application/json':
-            data = cjson.decode(data)
+            data = loads(data)
 
         if '200' == status['status']:
             return data
