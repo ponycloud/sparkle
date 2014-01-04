@@ -37,6 +37,51 @@ information the database will come up eventually. This makes small setups
 without a dedicated controller entirely possible. With some external help,
 Sparkle can even be made high-available in such settings.
 
+## API
+
+Endpoints are generated from schema using the parent/child relations.
+Because some entity types have multiple parents, they can be reached
+under different URLs.
+
+There are two fundamental types of endpoints: collections and entities.
+
+Collection endpoints support three HTTP methods.  `GET` to retrieve list
+of child entities, `POST` to create a new child entity and finally,
+`PATCH` that will apply a JSON Patch with collection as the root document.
+
+Entities also support three HTTP methods.  `GET` to retrieve their state,
+`DELETE` for their complete removal, and `PATCH` that will apply a JSON Patch
+with entity as the root document.
+
+Note that although `/collection/entity/collection/...` paths are used in
+the API, the patches use a slightly different hierarchy that reflects the
+presence of `children` element within every entity.
+
+
+## Database Dictionary
+
+Both primary and foreign keys are immutable.  They can only be changed
+by using the `move` patch operation.  Since both source and destination
+paths are validated, it is not possible to move an entity under different
+tenant without being an administrator.
+
+It is also not possible to perform a move along a different ownership path.
+In other words, it is impossible to perform this move:
+
+    {
+      "op": "move",
+      "from": "/cpu_profile/<cpu-profile-id>/instance/<instance-id>",
+      "path": "/tenant/<tenant-id>/instance/<instance-id>"
+    }
+
+On the other hand, this move would be valid (for an administrator):
+
+    {
+      "op": "move",
+      "from": "/tenant/<tenant-id-2>/instance/<instance-id>",
+      "path": "/tenant/<tenant-id-1>/instance/<instance-id>"
+    }
+
 
 # Twilight
 

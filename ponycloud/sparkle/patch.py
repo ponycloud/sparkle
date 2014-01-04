@@ -14,7 +14,7 @@ another reference to original data.  That, however, does not mean that the
 target won't copy the referenced value when receiving it.
 """
 
-__all__ = ['Pointer', 'patch', 'validate_patch']
+__all__ = ['Pointer', 'apply_patch', 'validate_patch', 'split']
 
 
 import jsonschema
@@ -37,7 +37,7 @@ def unescape(part):
 def split(path):
     if '/' != path[:1]:
         raise ValueError('invalid path %r' % (path,))
-    return [unescape(part) for part in path.split('/')]
+    return [unescape(part) for part in path.split('/')[1:]]
 
 
 def cast_part(document, part):
@@ -58,23 +58,23 @@ class Pointer(object):
     """Pointer to a document fragment."""
 
     def __init__(self, document, path=[]):
-        document = {'': document}
+        self.path = []
+        self.target = {'': document}
 
         if isinstance(path, basestring):
-            parts = split(path)
+            parts = [''] + split(path)
         else:
             parts = [''] + path
 
-        self.path = []
-
         for part in parts[:-1]:
-            part = cast_part(document, part)
-            document = document[part]
+            part = cast_part(self.target, part)
+            self.target = self.target[part]
             self.path.append(part)
 
-        part = cast_part(document, parts[-1])
+        part = cast_part(self.target, parts[-1])
         self.path.append(part)
-        self.target = document
+        self.path.pop(0)
+
         self.key = part
 
     def get(self):
@@ -137,7 +137,7 @@ def validate_patch(operations):
     jsonschema.validate(operations, patch_schema)
 
 
-def patch(document, operations):
+def apply_patch(document, operations):
     """
     Apply sequence of JSON Patch operations to a document.
     The document is always modified in-place.
@@ -168,7 +168,7 @@ def patch(document, operations):
 
         if op == 'test':
             if ptr.get() != value:
-                raise ValueError('value of %r does not match' % (ptr.path))
+                raise ValueError('value of %r does not match' % (ptr.path,))
         elif op == 'remove':
             ptr.remove()
         elif op == 'add':

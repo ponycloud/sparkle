@@ -31,8 +31,9 @@ if __name__ == '__main__':
         db = sqlsoup.SQLSoup(config.get('db', 'url'))
 
         # Prepare the WS notifier
-        notifier = Notifier(config.get('ws', 'url'), debugWamp=True)
-        notifier.passkey = config.get('auth', 'passkey')
+        #notifier = Notifier(config.get('ws', 'url'), debugWamp=True)
+        #notifier.passkey = config.get('auth', 'passkey')
+        notifier = None
 
         # Prepare the manager that takes care of business logic.
         manager = Manager(router, db, notifier, dict(config.items('auth')))

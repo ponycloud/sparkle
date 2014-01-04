@@ -3,15 +3,13 @@
 __all__ = ['Flaskful', 'json_response']
 
 from flask import Flask, Response, make_response, request
-
-from traceback import print_exc
-
-from auth import check_auth
-
+from werkzeug.exceptions import Unauthorized
 from functools import wraps
 from simplejson import dumps
+from traceback import print_exc
+from auth import authenticate
 
-def json_response(data, status=200):
+def json_response(data, status=200, headers={}):
     """
     Creates JSON response object from given structure.
     """
@@ -19,6 +17,11 @@ def json_response(data, status=200):
         return data
     else:
         resp = make_response(dumps(data, indent=2) + '\n', status)
+        resp.headers = headers
+
+        if status == 401:
+            resp.headers['WWW-Authenticate'] = 'Basic realm="Sparkle"'
+
         resp.headers['content-type'] = 'application/json'
         return resp
 
@@ -39,7 +42,16 @@ class Flaskful(Flask):
             return json_response({
                 'error': 'bad-request',
                 'message': e.description.strip(),
-            }, 400)
+            }, 400, getattr(e, 'headers', {}))
+
+        @self.errorhandler(401)
+        def unauthorized(e):
+            return json_response({
+                'error': 'unauthorized',
+                'message': e.description \
+                            if not e.description.startswith('<p>') \
+                            else 'you need to login to access this url'
+            }, 401, getattr(e, 'headers', {}))
 
         @self.errorhandler(404)
         def page_not_found(e):
@@ -48,14 +60,14 @@ class Flaskful(Flask):
                 'message': e.description \
                                 if not e.description.startswith('<p>') \
                                 else 'requested url was not found',
-            }, 404)
+            }, 404, getattr(e, 'headers', {}))
 
         @self.errorhandler(500)
         def internal_server_error(e):
             return json_response({
                 'error': 'internal-server-error',
                 'hint': unicode(e),
-            }, 500)
+            }, 500, getattr(e, 'headers', {}))
 
     def route_json(self, rule, **options):
         """
@@ -70,26 +82,23 @@ class Flaskful(Flask):
             return wrapper
         return wrap
 
-    def authenticate(self):
-        """
-        Sends a 401 response that enables basic auth
-        """
-        return Response(
-        'Could not verify your access level for that URL.\n'
-        'You have to login with proper credentials', 401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-    def requires_auth(self, manager):
+    def require_credentials(self, manager):
         def wrap(f):
             @wraps(f)
             def wrapper(*args, **kwargs):
-                username = check_auth(request.headers.get("Authorization"), manager)
-                if username is False:
-                    return self.authenticate()
-                return f(username, *args, **kwargs)
+                auth = request.headers.get('Authorization')
+                if not auth:
+                    raise Unauthorized('no credentials supplied')
+
+                credentials = authenticate(auth, manager)
+                if not credentials:
+                    raise Unauthorized('invalid credentials supplied')
+
+                kwargs['credentials'] = credentials
+
+                return f(*args, **kwargs)
             return wrapper
         return wrap
-
 
 
 # vim:set sw=4 ts=4 et:

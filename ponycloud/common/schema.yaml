@@ -45,7 +45,6 @@ event:
 extent:
   parents:
     - [storage_pool, storage_pool]
-    - [volume, volume]
   pkey: uuid
 
 host:
@@ -60,7 +59,6 @@ image:
 
 instance:
   parents:
-    - [cpu_profile, cpu_profile]
     - [tenant, tenant]
   pkey: uuid
 
@@ -118,8 +116,6 @@ user:
 vdisk:
   parents:
     - [instance, instance]
-    - [volume, volume]
-    - [storage_pool, storage_pool]
   pkey: uuid
 
 vnic:

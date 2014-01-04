@@ -1,203 +1,200 @@
 #!/usr/bin/python -tt
 
-"""
-Sparkle RESTful API
+__doc__ = """
+Sparkle API
 
-This module implements backend for Sparkle RESTful API.
+Most of our endpoints are generated from the schema and backed by a
+custom JSON Patch implementation.  Schema-derived GETs receive their
+data from Manager and return both desired and current state.
+
+Other endpoints provide access to schema and means for token-based
+authentication.
 """
 
 __all__ = ['make_sparkle_app']
 
 from twisted.internet.threads import blockingCallFromThread
 from twisted.internet import reactor
-
 from werkzeug.exceptions import BadRequest, InternalServerError, NotFound
-from ponycloud.common.rest import Flaskful
-from ponycloud.common.auth import get_token
-
-from flask import request
-
-from ponycloud.sparkle.manager import ManagerError, UserError, PathError
-
-from os.path import dirname
+from simplejson import loads, dumps
 from functools import wraps
+from os.path import dirname
+from operator import add
+from time import time
+from collections import Mapping
 
-import cjson
-import re
-import base64
-import time
+from ponycloud.common.schema import schema
 
-AUTOMAGIC_ENDPOINTS = [
-    '/disk/<varchar:disk>',
-    '/volume/<uuid:volume>',
-    '/cpu-profile/<uuid:cpu_profile>',
-    '/storage-pool/<uuid:storage_pool>',
-    '/storage-pool/<uuid:storage_pool>/disk/<varchar:disk>',
-    '/host/<uuid:host>',
-    '/host/<uuid:host>/nic/<varchar:nic>',
-    '/host/<uuid:host>/bond/<uuid:bond>',
-    '/host/<uuid:host>/bond/<uuid:bond>/nic/<varchar:nic>',
-    '/host/<uuid:host>/bond/<uuid:bond>/nic-role/<uuid:nic_role>',
-    '/host/<uuid:host>/disk/<varchar:disk>',
-    '/image/<uuid:image>',
-    '/switch/<uuid:switch>',
-    '/switch/<uuid:switch>/network/<uuid:network>',
-    '/switch/<uuid:switch>/network/<uuid:network>/route/<uuid:route>',
-    '/tenant/<uuid:tenant>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>/vdisk/<uuid:vdisk>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>/cluster-instance/<uuid:cluster_instance>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>/address/<uuid:address>',
-    '/tenant/<uuid:tenant>/instance/<uuid:instance>/vnic/<uuid:vnic>/switch/<uuid:switch>',
-    '/tenant/<uuid:tenant>/image/<uuid:image>',
-    '/tenant/<uuid:tenant>/quota/<uuid:quota>',
-    '/tenant/<uuid:tenant>/volume/<uuid:volume>',
-    '/tenant/<uuid:tenant>/volume/<uuid:volume>/vdisk/<uuid:vdisk>',
-    '/tenant/<uuid:tenant>/volume/<uuid:volume>/extent/<uuid:extent>',
-    '/tenant/<uuid:tenant>/cluster/<uuid:cluster>',
-    '/tenant/<uuid:tenant>/cluster/<uuid:cluster>/cluster-instance/<uuid:cluster_instance>',
-    '/tenant/<uuid:tenant>/switch/<uuid:switch>',
-    '/tenant/<uuid:tenant>/switch/<uuid:switch>/network/<uuid:network>',
-    '/tenant/<uuid:tenant>/switch/<uuid:switch>/network/<uuid:network>/route/<uuid:route>',
-    '/tenant/<uuid:tenant>/member/<varchar:member>',
-    '/user/<varchar:user>',
-    '/user/<varchar:user>/member/<uuid:member>',
-]
+from ponycloud.sparkle.rest import Flaskful
+from ponycloud.sparkle.auth import sign_cookie
+from ponycloud.sparkle.patch import validate_patch, apply_patch, split
+from ponycloud.sparkle.dbdict import validate_dbdict_fragment, make_schema, \
+                                     preprocess_dbdict_patch, Children
+
+import flask
 
 
-def get_endpoints():
-    """
-    Returns processed endpoints from above.
-    """
+def path_to_endpoint(path):
+    """Convert list with path components to endpoint string for Flask."""
+    return '/v1/' + '/'.join(reduce(add, [[x, '<string:%s>' % x] for x in path]))
 
-    endpoints = []
+def remove_nulls(data):
+    """Recursively remove None values from dictionary."""
 
-    for rule in AUTOMAGIC_ENDPOINTS:
-        ep = re.sub('([^/]+)/<', '\\1<', rule[1:])
-        ep = ep.split('/')
-        out = []
-        for i in xrange(len(ep)):
-            if '<' in ep[i]:
-                out.append(re.split('[<>:]', ep[i])[2])
+    if not isinstance(data, Mapping):
+        return data
 
-        endpoints.append((rule, out))
+    return {k: remove_nulls(v) for k, v in data.iteritems() if v is not None}
 
-    return endpoints
+def make_json_schema(cache, credentials, manager, write=True):
+        """Prepare schema for specified conditions."""
 
+        tenant = credentials.get('tenant')
+        user = credentials.get('user')
 
-def convert_exceptions(fn):
-    """Decorator that changes manager errors to HTTP exceptions."""
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except PathError, e:
-            raise NotFound(e.message)
-        except UserError, e:
-            raise BadRequest(e.message)
-        except ManagerError, e:
-            raise InternalServerError(e.message)
+        key = (tenant, user, write)
+        if key in cache:
+            return cache[key]
 
-    return wrapper
+        alicorn = False
+        if user is not None and user in manager.model['user']:
+            alicorn = manager.model['user'][user].get_desired('alicorn', False)
 
-
-def call(fn, *args, **kwargs):
-    return blockingCallFromThread(reactor, fn, *args, **kwargs)
-
-
-def make_collection_handler(manager, path):
-    """
-    Creates collection endpoint handler for given path.
-    """
-
-    @convert_exceptions
-    def handler(**keys):
-        # Set tenant to None by in order to properly display
-        # entities below the tenant level.
-        keys.setdefault('tenant', None)
-
-        if 'GET' == request.method:
-            return call(manager.list_collection, path, keys)
-        elif 'POST' == request.method:
-            data = cjson.decode(request.data)
-            return call(manager.create_or_update_entity, path, keys, data)
-
-    handler.__name__ = 'c_' + '_'.join(path)
-    return handler
-
-
-def make_entity_handler(manager, path):
-    """
-    Creates entity endpoint handler for given path.
-    """
-
-    @convert_exceptions
-    def handler(**keys):
-        # Set tenant to None by in order to properly display
-        # entities below the tenant level.
-        keys.setdefault('tenant', None)
-
-        if 'GET' == request.method:
-            return call(manager.get_entity, path, keys)
-        elif 'PUT' == request.method:
-            data = cjson.decode(request.data)
-            return call(manager.create_or_update_entity, path, keys, data)
-        elif 'DELETE' == request.method:
-            return call(manager.delete_entity, path, keys)
-
-    handler.__name__ = 'e_' + '_'.join(path)
-    return handler
+        return cache.setdefault(key, make_schema(tenant, alicorn, write))
 
 
 def make_sparkle_app(manager):
-    """
-    Constructs Sparkle RESTful API site.
-    """
+    """Construct Sparkle RESTful API site."""
 
-    # Create the application.
     app = Flaskful(__name__)
     app.debug = True
 
-    # Just re-use the converters for now.
-    app.url_map.converters['uuid'] = app.url_map.converters['string']
-    app.url_map.converters['varchar'] = app.url_map.converters['string']
+    def apply_valid_patch(patch):
+        """
+        Preprocess and apply validated JSON Patch to database.
+        Returns dictionary with placeholder to uuid mappings.
+        """
 
-    # Generate endpoints.
-    for rule, path in get_endpoints():
-        app.route_json(rule, methods=['GET', 'PUT', 'DELETE'])(make_entity_handler(manager, path))
-        app.route_json(dirname(rule) + '/', methods=['GET', 'POST'])(make_collection_handler(manager, path))
+        try:
+            uuids = preprocess_dbdict_patch(patch)
+            apply_patch(Children(manager.db), patch)
+            manager.db.commit()
+            return uuids
+        except Exception, e:
+            manager.db.rollback()
+            raise
+
+    def make_handlers(path):
+        def common_patch(credentials, keys, cache, jpath):
+            """PATCH handler for both collection and entity endpoints."""
+
+            patch = loads(flask.request.data)
+            validate_patch(patch)
+
+            for op in patch:
+                writep = ('TEST' != op['op'])
+                jschema = make_json_schema(cache, credentials, manager, writep)
+                op['path'] = jpath + split(op['path'])
+                validate_dbdict_fragment(jschema, op.get('value', {}), op['path'])
+
+                if 'from' in op:
+                    jschema = make_json_schema(cache, credentials, manager, False)
+                    op['from'] = jpath + split(op['from'])
+                    validate_dbdict_fragment(jschema, {}, op['from'])
+
+            return {'uuids': apply_valid_patch(patch)}
+
+        @app.require_credentials(manager)
+        def collection_handler(credentials={}, **keys):
+            jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-2]
+            cache = {}
+
+            if 'GET' == flask.request.method:
+                jschema = make_json_schema(cache, credentials, manager, False)
+                validate_dbdict_fragment(jschema, {}, jpath)
+
+                data = blockingCallFromThread(reactor, manager.list_collection, path, keys)
+                return remove_nulls(data)
+
+            if 'PATCH' == flask.request.method:
+                return common_patch(credentials, keys, cache, jpath)
+
+        @app.require_credentials(manager)
+        def entity_handler(credentials={}, **keys):
+            jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-1]
+            cache = {}
+
+            if 'GET' == flask.request.method:
+                jschema = make_json_schema(cache, credentials, manager, False)
+                validate_dbdict_fragment(jschema, {}, jpath)
+
+                data = blockingCallFromThread(reactor, manager.get_entity, path, keys)
+                return remove_nulls(data)
+
+            if 'DELETE' == flask.request.method:
+                jschema = make_json_schema(cache, credentials, manager, True)
+                validate_dbdict_fragment(jschema, {}, jpath)
+
+                patch = [{'op': 'remove', 'path': jpath}]
+                return {'uuids': apply_valid_patch(patch)}
+
+            if 'PATCH' == flask.request.method:
+                return common_patch(credentials, keys, cache, jpath)
+
+        collection_handler.__name__ = 'c_' + '_'.join(path)
+        entity_handler.__name__     = 'e_' + '_'.join(path)
+
+        return collection_handler, entity_handler
+
+    # Generate entity and collection endpoints.
+    for path in schema.iter_paths():
+        rule = path_to_endpoint(path)
+
+        collection_handler, entity_handler = make_handlers(path)
+
+        methods = ['GET', 'DELETE', 'PATCH']
+        app.route_json(rule, methods=methods)(entity_handler)
+
+        methods = ['GET', 'POST', 'PATCH']
+        app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
 
     # Custom top-level endpoint.
     @app.route_json('/')
     def index():
         return {
             'application': 'Sparkle',
-            'capabilities': [],
+            'capabilities': ['v1'],
         }
 
-    # Generate token endpoint
-    @app.route_json('/token')
-    @app.requires_auth(manager)
-    def token(username):
+    # Issues token for detected credentials.
+    # Cannot be used to generate tenant token, only to renew it.
+    @app.route_json('/v1/token')
+    @app.require_credentials(manager)
+    def token(credentials={}):
+        payload = dumps(credentials)
+        apikey = manager.authkeys['apikey']
         validity = 3600
-        token = get_token(username, manager.authkeys['passkey'], validity)
-        return {'token': base64.b64encode(cjson.encode(token)), 'validity': int(time.time() + validity)}
 
-    # Simple reflection of the data endpoints.
-    @app.route_json('/_endpoints')
+        return {
+            'token': sign_cookie(payload, apikey, validity),
+            'valid': int(time() + validity),
+        }
+
+    # Endpoint to dump the schema for clients to orient themselves.
+    @app.route_json('/v1/schema')
     def endpoints():
-        return AUTOMAGIC_ENDPOINTS
+        return schema
 
 
     # Debugging endpoint that dumps all data in the Sparkle model.
-    @app.route_json('/_dump')
-    def dump():
-        return call(manager.model.dump)
+    if app.debug:
+        @app.route_json('/v1/dump')
+        def dump():
+            return blockingCallFromThread(manager.model.dump)
 
     # Ta-dah?
     return app
-# /def make_sparkle_app
+
 
 # vim:set sw=4 ts=4 et:
 # -*- coding: utf-8 -*-

@@ -2,7 +2,7 @@
 
 from autobahn.wamp import WampServerFactory, WampCraServerProtocol, exportRpc
 from autobahn.websocket import listenWS
-from ponycloud.common.auth import verify_token
+from ponycloud.sparkle.auth import verify_token
 from simplejson import loads
 
 __all__ = ['Notifier']

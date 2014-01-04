@@ -8,7 +8,7 @@ import jsonschema
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm.exc import UnmappedInstanceError
 from pprint import pformat
-from uuid import uuid4
+from uuid import UUID, uuid4
 from collections import Mapping, MutableMapping, Sequence, MutableSequence
 
 from ponycloud.common.schema import schema
@@ -54,6 +54,50 @@ def validate_dbdict_fragment(schema, fragment, path=[]):
     jsonschema.validate(fragment, schema)
 
 
+def is_uuid(uuid):
+    try:
+        return UUID(uuid) and True
+    except ValueError:
+        return False
+
+
+def preprocess_dbdict_fragment(fragment, path, uuids, safe):
+    """
+    Wrap selected fragment with several dicts representing the path
+    leading to it and then put it through UUID mapping process.
+
+    Both fragment and path are modified to contain just valid UUIDs.
+    Mappings are stored in the uuids dictionary.
+    """
+
+    for part in reversed(path):
+        fragment = {part: fragment}
+
+    Children.preprocess(fragment, uuids, safe)
+
+    for i in xrange(len(path)):
+        key = fragment.keys()[0]
+        fragment = fragment[key]
+        path[i] = key
+
+
+def preprocess_dbdict_patch(patch):
+    """Preprocess all operations of a valid DbDict patch."""
+
+    uuids = {}
+
+    for op in patch:
+        value = op.get('value', {})
+        path  = op.get('path', [])
+
+        preprocess_dbdict_fragment(value, path, uuids, ('test' != op['op']))
+
+        if 'from' in op:
+            preprocess_dbdict_fragment({}, op['from'], uuids, False)
+
+    return uuids
+
+
 def make_schema(tenant=None, alicorn=False, write=False):
     """
     Create JSON Schema for specific conditions.
@@ -70,7 +114,7 @@ def make_schema(tenant=None, alicorn=False, write=False):
             'properties': {},
         }
 
-        for tname, table in schema.items():
+        for tname, table in schema.iteritems():
             if 0 == len(path):
                 if 0 != len(table['parents']) and not table.get('public'):
                     continue
@@ -144,7 +188,7 @@ class DbDict(MutableMapping, dict):
             return False
 
     def __len__(self):
-        return len(iter(self))
+        return len(list(iter(self)))
 
     def __repr__(self):
         return pformat(self.to_dict())
@@ -162,7 +206,7 @@ class DbDict(MutableMapping, dict):
     def to_dict(self):
         """Recursively convert to a plain dictionary."""
         result = {}
-        for k, v in self.items():
+        for k, v in self.iteritems():
             if isinstance(v, DbDict):
                 result[k] = v.to_dict()
             else:
@@ -211,7 +255,7 @@ class Children(DbDict):
     def __iter__(self):
         """Name all tables that have our entity table as their parent."""
 
-        for name, entity in schema:
+        for name, entity in schema.iteritems():
             if self.parent_table is None:
                 # When self.parent_table is None, we are interested only in
                 # tables that are at the root.
@@ -221,6 +265,11 @@ class Children(DbDict):
                 for local_field, remote_table in entity['parents']:
                     if remote_table == self.parent_table:
                         yield name
+
+    @staticmethod
+    def preprocess(fragment, uuids, safe):
+        for k, v in fragment.iteritems():
+            Collection.preprocess(v, uuids, safe)
 
 
 class Collection(DbDict):
@@ -276,15 +325,20 @@ class Collection(DbDict):
         desired = dict(value['desired'])
 
         pkey = schema[self.table]['pkey']
-        fkey = schema.get_fkey(self.table, self.parent_table)
-        parent_pkey = desired.setdefault(fkey, self.parent_pkey)
 
-        if parent_pkey != self.parent_pkey:
-            raise ValueError('cannot add %s/%s with invalid parent %s' \
-                                % (self.table, key, parent_pkey))
+        if pkey in desired and desired[pkey] != key:
+            raise KeyError('%s/%s/desired/%s (%s) does not match' \
+                            % (self.table, key, pkey, desired[pkey]))
 
-        if pkey == 'uuid' and 'uuid' not in desired:
-            desired[pkey] = uuid4()
+        desired[pkey] = key
+
+        if self.parent_table:
+            fkey = schema.get_fkey(self.table, self.parent_table)
+            parent_pkey = desired.setdefault(fkey, self.parent_pkey)
+
+            if parent_pkey != self.parent_pkey:
+                raise ValueError('cannot add %s/%s with invalid parent %s' \
+                                    % (self.table, key, parent_pkey))
 
         getattr(self.db, self.table).insert(**desired)
         self.db.flush()
@@ -299,6 +353,20 @@ class Collection(DbDict):
             self.db.flush()
         except UnmappedInstanceError:
             raise KeyError('%s/%s not found' % (self.table, key))
+
+    @staticmethod
+    def preprocess(fragment, uuids, safe):
+        for k, v in list(fragment.iteritems()):
+            if not is_uuid(k):
+                if k in uuids:
+                    nk = uuids[k]
+                else:
+                    nk = uuids.setdefault(k, str(uuid4()))
+
+                fragment[nk] = v
+                del fragment[k]
+
+            Entity.preprocess(v, uuids, safe)
 
 
 class Entity(DbDict):
@@ -337,6 +405,14 @@ class Entity(DbDict):
                                 % (self.table, self.pkey, key))
 
         raise TypeError('%s/%s/%s cannot exist' % (self.table, self.pkey, key))
+
+    @staticmethod
+    def preprocess(fragment, uuids, safe):
+        for k, v in fragment.iteritems():
+            if 'desired' == k:
+                Desired.preprocess(v, uuids, safe)
+            elif 'children' == k:
+                Children.preprocess(v, uuids, safe)
 
 
 class Desired(DbDict):
@@ -443,78 +519,20 @@ class Desired(DbDict):
         setattr(entity, key, value)
         self.db.flush()
 
+    @staticmethod
+    def preprocess(fragment, uuids, safe):
+        for k, v in fragment.iteritems():
+            if 'uuid' == k:
+                if is_uuid(v):
+                    if safe:
+                        raise ValueError('user-defined uuid %r' % (v,))
+                else:
+                    if v in uuids:
+                        nv = uuids[v]
+                    else:
+                        nv = uuids.setdefault(v, str(uuid4()))
 
-if __name__ == '__main__':
-    hnus = [{'op': 'add', 'path': '/instance/%uuid[5]%',
-            'value': {'desired':
-                          {
-                           'tenant': '76764219-6bd4-4278-8b7b-659fc43c939e',
-                           'name': 'Precious Instance %uuid[5]%',
-                           'state': 'running',
-                           'vcpu': 1,
-                           'rcpu': 0.1,
-                           'mem': 1024,
-                           'cpu_profile': '681a3fc6-313f-4772-87f4-595b53bb20af',
-                           'ns': ['8.8.8.8']
-                          },
-                      'children': {
-                          'vdisk': {
-                              '%uuid[7]%': {'desired':
-                                                {'uuid': '%uuid[7]%',
-                                                 'instance': '%uuid[5]%',
-                                                 'volume': '4d6d6ca4-eb09-4d09-8c47-c7918d672e8e',
-                                                 'storage_pool': '2d8ba590-4b1f-4512-87db-f6dd44155f01',
-                                                 'index': 1,
-                                                 'size': 1024}},
-                              '%uuid[8]%': {'desired':
-                                                {'uuid': '%uuid[8]%',
-                                                 'instance': '%uuid[5]%',
-                                                 'volume': '4d6d6ca4-eb09-4d09-8c47-c7918d672e8e',
-                                                 'storage_pool': '2d8ba590-4b1f-4512-87db-f6dd44155f01',
-                                                 'index': 2,
-                                                 'size': 4096}}
-                          }
-                      }
-            }},
-            {'op': 'replace', 'path': '/instance/%uuid[5]%', 'value': {'desired': {'name': 'My Precious Instance Updated'}}},
-            {'op': 'remove', 'path': '/instance/%uuid[5]%/children/vdisk/%uuid[7]%'}
-            ]
-
-    flus = [{'op': 'add', 'path': '/instance/%uuid[1]%',
-            'value': {'desired':
-                          {
-                           'tenant': '76764219-6bd4-4278-8b7b-659fc43c939e',
-                           'name': 'Precious Instance %uuid[5]%',
-                           'state': 'running',
-                           'vcpu': 1,
-                           'rcpu': 0.1,
-                           'mem': 1024,
-                           'cpu_profile': '681a3fc6-313f-4772-87f4-595b53bb20af',
-                           'ns': ['8.8.8.8']
-                          },
-                      'children': {
-                          'vdisk': {
-                              '%uuid[2]%': {'desired':
-                                                {'volume': '4d6d6ca4-eb09-4d09-8c47-c7918d672e8e',
-                                                 'storage_pool': '2d8ba590-4b1f-4512-87db-f6dd44155f01',
-                                                 'index': 2,
-                                                 'size': 2048}}
-                          }
-                      }
-            }},
-            {'op': 'replace', 'path': '/instance/%uuid[1]%/desired/name', 'value': 'Whatever %uuid[10]%'},
-            {'op': 'replace',
-             'path': '/instance/%uuid[1]%/children/vdisk/%uuid[2]%',
-             'value': {
-                 'desired': {
-                     'volume': '4d6d6ca4-eb09-4d09-8c47-c7918d672e8e',
-                     'storage_pool': '2d8ba590-4b1f-4512-87db-f6dd44155f01',
-                     'index': 1,
-                     'size': 5120}
-             }
-            },
-                    #{'op': 'remove', 'path': '/instance/%uuid[1]%'}
-    ]
+                    fragment[k] = nv
 
 
 # vim:set sw=4 ts=4 et:

@@ -281,7 +281,7 @@ class Table(dict):
         # None here means all rows, so that we don't have to maintain
         # redundant index of all primary keys.
         selection = None
-        for k, v in keys.items():
+        for k, v in keys.iteritems():
             if k not in self.index and k not in self.nm_index:
                 continue
 
