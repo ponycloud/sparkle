@@ -26,7 +26,7 @@ from collections import Mapping
 from ponycloud.common.schema import schema
 
 from ponycloud.sparkle.rest import Flaskful
-from ponycloud.sparkle.auth import sign_cookie
+from ponycloud.sparkle.auth import sign_token
 from ponycloud.sparkle.patch import validate_patch, apply_patch, split
 from ponycloud.sparkle.dbdict import validate_dbdict_fragment, make_schema, \
                                      preprocess_dbdict_patch, Children
@@ -176,7 +176,7 @@ def make_sparkle_app(manager):
         validity = 3600
 
         return {
-            'token': sign_cookie(payload, apikey, validity),
+            'token': sign_token(payload, apikey, validity),
             'valid': int(time() + validity),
         }
 
