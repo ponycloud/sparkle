@@ -6,10 +6,6 @@
  *  More detailed description of the [architecture][].
  *  Generated [database schema][] with comments, the [big picture][].
 
-# Other
-
- *  Information [for investors][].
-
 # Contacts
 
 **Ondřej Koch**
