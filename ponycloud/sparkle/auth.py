@@ -71,7 +71,7 @@ def passcmp(a, b):
 def extract_token(token, key):
     """
     Extract and return token payload if valid or raise ValueError if the
-    token have been tampered with or have expired since being issued.
+    token have been tampered with or has expired since being issued.
 
     :param token:  String to extract payload from.
     :param key:    Persistent server key.
@@ -90,7 +90,7 @@ def extract_token(token, key):
         raise ValueError('token have been tampered with')
 
     if int(timestamp) < int(time()):
-        raise ValueError('token have expired')
+        raise ValueError('token has expired')
 
     return payload
 
