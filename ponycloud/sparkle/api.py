@@ -15,7 +15,8 @@ __all__ = ['make_sparkle_app']
 
 from twisted.internet.threads import blockingCallFromThread
 from twisted.internet import reactor
-from werkzeug.exceptions import BadRequest, InternalServerError, NotFound
+from werkzeug.exceptions import BadRequest, InternalServerError, NotFound, \
+                                Unauthorized
 from simplejson import loads, dumps
 from functools import wraps
 from os.path import dirname
@@ -166,11 +167,9 @@ def make_sparkle_app(manager):
             'capabilities': ['v1'],
         }
 
-    # Issues token for detected credentials.
-    # Cannot be used to generate tenant token, only to renew it.
-    @app.route_json('/v1/token')
-    @app.require_credentials(manager)
-    def token(credentials={}):
+    def make_token_result(credentials):
+        """Create response with specified credentials."""
+
         payload = dumps(credentials)
         apikey = manager.authkeys['apikey']
         validity = 3600
@@ -179,6 +178,43 @@ def make_sparkle_app(manager):
             'token': sign_token(payload, apikey, validity),
             'valid': int(time() + validity),
         }
+
+    # Issues token for detected credentials.
+    # Cannot be used to generate tenant token, only to renew it.
+    @app.route_json('/v1/token')
+    @app.require_credentials(manager)
+    def token(credentials={}):
+        return make_token_result(credentials)
+
+    # Issues tenant token if credentials match (user is tenant's member,
+    # alirn or the supplied token already is a token for this tenant).
+    @app.route_json('/v1/tenant/<string:tenant>/token')
+    @app.require_credentials(manager)
+    def tenant_token(credentials={}, tenant=None):
+        tenant_row = blockingCallFromThread(reactor,
+                                            manager.model['tenant'].get,
+                                            tenant)
+
+        if tenant_row is None:
+            raise NotFound('invalid tenant')
+
+        if 'tenant' in credentials:
+            return make_token_result(credentials)
+
+        user = blockingCallFromThread(reactor,
+                                      manager.model['user'].get,
+                                      credentials['user'])
+
+        if user is None or not user.desired.get('alicorn'):
+            member = blockingCallFromThread(reactor,
+                                            manager.model['member'].one,
+                                            tenant=tenant,
+                                            user=credentials['user'])
+
+            if member is None:
+                raise Unauthorized('you are not a member of the tenant')
+
+        return make_token_result({'tenant': tenant})
 
     # Endpoint to dump the schema for clients to orient themselves.
     @app.route_json('/v1/schema')
@@ -190,7 +226,7 @@ def make_sparkle_app(manager):
     if app.debug:
         @app.route_json('/v1/dump')
         def dump():
-            return blockingCallFromThread(manager.model.dump)
+            return blockingCallFromThread(reactor, manager.model.dump)
 
     # Ta-dah?
     return app
