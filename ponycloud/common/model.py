@@ -2,6 +2,10 @@
 
 __all__ = ['Model']
 
+
+from schema import schema
+
+
 class Model(dict):
     """
     PonyCloud Data Model
@@ -17,7 +21,7 @@ class Model(dict):
         """Constructs the model."""
 
         # Prepare all model tables.
-        self.update({t.name: t() for t in TABLES})
+        self.update({t.name: t(self) for t in TABLES})
 
         # Let tables watch other tables for some relations to work.
         for table in self.values():
@@ -83,8 +87,11 @@ class Table(dict):
     # List of child tables. Contains only names.
     children = []
 
-    def __init__(self):
+    def __init__(self, model):
         """Prepare internal data structures of the table."""
+
+        # Back-reference to the model.
+        self.model = model
 
         # Start with empty indexes.
         self.index = {i: {'desired': {}, 'current': {}} \
@@ -107,16 +114,6 @@ class Table(dict):
             return tuple([row[k] for k in cls.pkey])
         return row[cls.pkey]
 
-    def get_allowed(self, pkey, model):
-        """ Default implementation"""
-        return {'tenants': self._get_allowed_tenants(pkey, model)}
-
-    def _get_allowed_tenants(self, pkey, model):
-        """ Default implementation """
-        row = self[pkey]
-        if row.desired and 'tenant' in row.desired:
-            return [row.desired['tenant']]
-        return []
 
     def add_watches(self, model):
         """Called to give table chance to watch other tables."""
@@ -208,7 +205,7 @@ class Table(dict):
             row.unindex(self)
         else:
             # Create new row object and add it to the table.
-            self[pkey] = row = Row(pkey)
+            self[pkey] = row = Row(self, pkey)
 
         # Fire callbacks to inform subscribers that the row will change.
         for rec in self.before_row_update_callbacks:
@@ -317,17 +314,40 @@ class Table(dict):
 
 class Row(object):
     # Each row have two parts, one for each "state".
-    __slots__ = ['pkey', 'desired', 'current']
+    __slots__ = ['table', 'pkey', 'desired', 'current']
 
 
-    def __init__(self, pkey):
+    def __init__(self, table, pkey):
         """Initializes the row."""
         self.pkey = pkey
+        self.table = table
         self.desired = None
         self.current = None
 
-    def get_allowed(self, table, model):
-            return table.get_allowed(self.pkey, model)
+
+    def get_tenants(self):
+        """
+        Return set of tenants that can access this row.
+
+        If the row cannot be accessed by any tenant, return an empty set.
+        Such rows are for example public images or alicorn-limited hosts.
+        """
+
+        tenants = set()
+
+        for path in schema.iter_paths():
+            if path[0] != 'tenant' or path[-1] != self.table.name:
+                continue
+
+            step = self
+            for i in reversed(xrange(len(path) - 1)):
+                fkey = step.desired[schema.get_fkey(path[i + 1], path[i])]
+                step = self.table.model[path[i]][fkey]
+
+            tenants.add(step.pkey)
+
+        return tenants
+
 
     def get_current(self, key, default=None):
         """Get value for given key in the current state."""
@@ -380,15 +400,6 @@ class Address(Table):
     name = 'address'
     indexes = ['network', 'vnic']
 
-    def _get_allowed_tenants(self, pkey, model):
-        """ Tenant that owns the switch this network is in """
-        row = self[pkey]
-        if row.desired:
-            vnic = model['vnic'][row.desired['vnic']]
-
-            return [model['instance'][vnic.desired['instance']].desired['tenant']]
-        return []
-
 
 class Bond(Table):
     name = 'bond'
@@ -405,13 +416,6 @@ class Cluster(Table):
 class ClusterInstance(Table):
     name = 'cluster_instance'
     indexes = ['cluster', 'instance']
-
-    def _get_allowed_tenants(self, pkey, model):
-        """ Tenant that owns the switch this network is in """
-        row = self[pkey]
-        if row.desired:
-            return [model['cluster'][row.desired['cluster']]]
-        return []
 
 
 class CPUProfile(Table):
@@ -470,13 +474,6 @@ class Network(Table):
     indexes = ['switch']
     children = ['route']
 
-    def _get_allowed_tenants(self, pkey, model):
-        """ Tenant that owns the switch this network is in """
-        row = self[pkey]
-        if row.desired:
-            return [model['switch'][row.desired['switch']].desired['tenant']]
-        return []
-
 
 class NIC(Table):
     name = 'nic'
@@ -497,14 +494,6 @@ class Quota(Table):
 class Route(Table):
     name = 'route'
     indexes = ['network']
-
-    def _get_allowed_tenants(self, pkey, model):
-        """ Route -> Network -> Switch -> Tenant """
-        row = self[pkey]
-        if row.desired:
-            network = model['network'][row.desired['network']]
-            return [model['switch'][network.desired['switch']].desired['tenant']]
-        return []
 
 
 class StoragePool(Table):
@@ -552,13 +541,6 @@ class VNIC(Table):
     name = 'vnic'
     indexes = ['instance', 'switch']
     children = ['address', 'switch']
-
-    def _get_allowed_tenants(self, pkey, model):
-        """ Tenant that owns particular instance """
-        row = self[pkey]
-        if row.desired:
-            return [model['instance'][row.desired['instance']].desired['tenant']]
-        return []
 
 
 class Volume(Table):
