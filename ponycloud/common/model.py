@@ -576,7 +576,7 @@ class HostVolume(Table):
     indexes = ['host', 'volume', 'type']
 
 
-TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk,
+TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk, Event,
           Extent, Host, Image, Instance, Member, Network,
           NIC, NICRole, Quota, Route, StoragePool, Switch, Tenant,
           TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,

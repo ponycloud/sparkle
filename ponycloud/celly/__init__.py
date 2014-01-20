@@ -3,28 +3,20 @@
 __all__ = ['Celly']
 
 from httplib2 import Http
+from urllib import quote
 from os.path import dirname
 
 from simplejson import loads, dumps
 import re
 
 
-def guess_key(item):
-    for part in ('desired', 'current'):
-        for key in ('uuid', 'id', 'key', 'hash', 'hwaddr', 'email'):
-            if item.get(part) is not None and key in item[part]:
-                return item[part][key]
-
-
 class CollectionProxy(object):
-    """
-    Remote collection proxy.
-    """
+    """Remote collection proxy."""
 
-    def __init__(self, celly, uri, children={}):
-        self.children = children
+    def __init__(self, celly, uri, prefix=()):
         self.celly = celly
         self.uri = uri
+        self.prefix = prefix
 
     def __iter__(self):
         return iter(self.list)
@@ -33,47 +25,46 @@ class CollectionProxy(object):
         if isinstance(key, int):
             return self.list[key]
 
-        child_uri = '%s%s' % (self.uri, key)
-        return EntityProxy(self.celly, child_uri, self.children)
+        child_uri = '%s%s' % (self.uri, quote(key, ''))
+        return EntityProxy(self.celly, child_uri, self.prefix)
+
+    def _get_key(self, item):
+        if 'desired' in item:
+            return item['desired'][self.celly.paths[self.prefix]['pkey']]
+        return item['current'][self.celly.paths[self.prefix]['pkey']]
 
     @property
     def list(self):
         out = []
-        for item in self.celly.request(self.uri):
-            child_uri = '%s%s' % (self.uri, guess_key(item))
-            out.append(EntityProxy(self.celly, child_uri, self.children))
+        for key, value in self.celly.request(self.uri).iteritems():
+            child_uri = '%s%s' % (self.uri, quote(key, ''))
+            out.append(EntityProxy(self.celly, child_uri, self.prefix))
         return out
 
-    def post(self, desired):
-        result = self.celly.request(self.uri, 'POST', dumps(desired))
-        child_uri = '%s%s' % (self.uri, guess_key({'desired': result}))
-        return EntityProxy(self.celly, child_uri, self.children)
+    def post(self, data):
+        return self.celly.request(self.uri, 'POST', dumps(data))
+
+    def patch(self, ops):
+        return self.celly.request(self.uri, 'PATCH', dumps(ops))
 
     def __repr__(self):
         return '<CollectionProxy %s>' % self.uri
 
 
 class EntityProxy(object):
-    """
-    Remote entity proxy.
-    """
+    """Remote entity proxy."""
 
-    def __init__(self, celly, uri, children={}):
+    def __init__(self, celly, uri, prefix=()):
         self.celly = celly
         self.uri = uri
-        self.children = children
 
-        for name, child in children.items():
-            child_uri = '%s/%s/' % (self.uri, name.replace('_', '-'))
-            setattr(self, name, CollectionProxy(self.celly, child_uri, child))
+        for path, info in self.celly.iter_child_paths(prefix):
+            col_uri = '%s/%s/' % (self.uri, quote(path[-1], ''))
+            setattr(self, path[-1], CollectionProxy(self.celly, col_uri, path))
 
     @property
     def desired(self):
         return self.celly.request(self.uri).get('desired')
-
-    @desired.setter
-    def desired(self, value):
-        self.celly.request(self.uri, 'PUT', dumps(value))
 
     @property
     def current(self):
@@ -81,6 +72,9 @@ class EntityProxy(object):
 
     def delete(self):
         return self.celly.request(self.uri, 'DELETE')
+
+    def patch(self, ops):
+        return self.celly.request(self.uri, 'PATCH', dumps(ops))
 
     def __repr__(self):
         return '<EntityProxy %s>' % self.uri
@@ -91,26 +85,25 @@ class Celly(object):
     Ponycloud RESTful API client.
     """
 
-    def __init__(self, base_uri='http://127.0.0.1:9860'):
-        """Queries the API and constructs client accordingly."""
+    def __init__(self, base_uri='http://127.0.0.1:9860/v1', headers={}):
+        """Queries the API schema and constructs client accordingly."""
+
         self.uri = base_uri
         self.http = Http()
-        self.children = {}
+        self.headers = headers
 
-        for ep in self.endpoints:
-            c = self.children
-            for name in [dirname(x) for x in re.split('>/', ep[1:])]:
-                c = c.setdefault(name.replace('-', '_'), {})
+        for path, info in self.iter_child_paths():
+            uri = '%s/%s/' % (base_uri, quote(path[-1], ''))
+            setattr(self, path[-1], CollectionProxy(self, uri, path))
 
-        for name, child in self.children.items():
-            child_uri = '%s/%s/' % (self.uri, name.replace('_', '-'))
-            setattr(self, name, CollectionProxy(self, child_uri, child))
+    def request(self, uri, method='GET', body=None, headers={}):
+        bh = self.headers.copy()
+        bh.update(headers)
 
-    def request(self, uri, method='GET', body=None, headers=None):
-        status, data = self.http.request(uri, method=method, body=body, \
-                                              headers=headers)
+        status, data = \
+                self.http.request(uri, method=method, body=body, headers=bh)
 
-        if status['content-type'] == 'application/json':
+        if status.get('content-type') == 'application/json':
             data = loads(data)
 
         if '200' == status['status']:
@@ -118,21 +111,32 @@ class Celly(object):
 
         if '404' == status['status']:
             if isinstance(data, dict):
-                raise KeyError(data['message'])
+                raise KeyError(data.get('message', 'not found'))
             raise KeyError('not found')
 
         if '400' == status['status']:
             if isinstance(data, dict):
-                raise ValueError(data['message'])
+                raise ValueError(data.get('message', 'bad request'))
             raise ValueError('bad request')
 
         if isinstance(data, dict):
-            raise Exception(data['message'])
-        raise Exception('API request failed')
+            raise Exception(data.get('message', 'request failed'))
+        raise Exception('request failed')
 
     @property
-    def endpoints(self):
-        return self.request('%s/_endpoints' % self.uri)
+    def paths(self):
+        if not hasattr(self, '_schema'):
+            paths = self.request('%s/schema' % self.uri)['paths']
+            self._paths = {tuple(k.split('/')): v \
+                           for k, v in paths.iteritems()}
+
+        return self._paths
+
+    def iter_child_paths(self, prefix=()):
+        for path, info in self.paths.iteritems():
+            if len(path) == len(prefix) + 1:
+                if prefix == path[:len(prefix)]:
+                    yield path, info
 
 
 # vim:set sw=4 ts=4 et:
