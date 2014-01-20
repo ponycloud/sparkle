@@ -219,7 +219,16 @@ def make_sparkle_app(manager):
     # Endpoint to dump the schema for clients to orient themselves.
     @app.route_json('/v1/schema')
     def endpoints():
-        return schema
+        def generate_path_schema():
+            for path in schema.iter_paths():
+                yield '/'.join(path), {
+                    'public': schema[path[-1]].get('public', False),
+                    'pkey': schema[path[-1]]['pkey'],
+                }
+
+        return {
+            'paths': dict(generate_path_schema()),
+        }
 
 
     # Debugging endpoint that dumps all data in the Sparkle model.
