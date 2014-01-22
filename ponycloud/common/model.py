@@ -309,6 +309,12 @@ class Table(dict):
         if len(items) != 1:
             return default
         return items[0]
+
+    def get_watch_handler(self, model, assign_callback):
+        def f(table, row):
+            assign_callback(table, row, row.get_desired('host'))
+        return f
+
 # /class Table
 
 
