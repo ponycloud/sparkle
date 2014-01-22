@@ -4,16 +4,17 @@ __all__ = ['Manager']
 
 from twisted.internet import task, reactor
 from twisted.internet.threads import deferToThread, blockingCallFromThread
-from twisted.internet.defer import Deferred
-
-from listener import ChangelogListener, ListenerError
-#from notifier import Notifier
 
 from sqlalchemy.exc import OperationalError, DatabaseError
 from sqlalchemy.orm.exc import NoResultFound
 
 from ponycloud.common.util import uuidgen
 from ponycloud.common.model import Model
+
+from ponycloud.sparkle.listener import ChangelogListener, ListenerError
+from ponycloud.sparkle.communicator import Communicator
+from ponycloud.sparkle.twilight import Twilight
+from ponycloud.sparkle.notifier import Notifier
 
 from functools import wraps
 
@@ -120,60 +121,26 @@ class Manager(object):
             self.incarnation = uuidgen()
             self.add_watches()
 
-            #self.notifier.load(self.model)
-            #self.notifier.start()
+            self.notifier.load(self.model)
+            self.notifier.start()
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
 
+    def ensure_host(self, data, sender):
+        uuid = data.get('uuid')
+        incarnation = data.get('incarnation')
 
-    def twilight_update(self, uuid, incarnation, changes, seq, sender):
-        """Handler for current state replication from Twilights."""
-
-        # Periodically notify new hosts.
         if uuid not in self.hosts:
             print 'twilight %s appeared' % uuid
-            loop = task.LoopingCall(self.send_changes, uuid, [])
-            reactor.callLater(0, loop.start, 15.0)
+            communicator = Communicator(self.incarnation, incarnation, sender, self.router)
+            self.hosts[uuid] = Twilight(uuid, self.model, communicator)
+        elif self.hosts[uuid].communicator is None:
+            communicator = Communicator(self.incarnation, incarnation, sender, self.router)
+            self.hosts[uuid].communicator = communicator
 
-            self.hosts[uuid] = {
-                'incarnation': None,
-                'current': {},
-                'inseq': 0,
-                'outseq': 1,
-                'loop': loop,
-            }
-
-        # Update host record.
-        host = self.hosts[uuid]
-        host['route'] = sender
-
-        if host['incarnation'] != incarnation or host['inseq'] != seq:
-            for table, objects in host['current'].iteritems():
-                for pkey in objects:
-                    self.model[table].update_row(pkey, 'current', None)
-
-            host['current'] = {}
-
-            if seq > 0:
-                print 'requesting resync with twilight %s' % uuid
-                self.router.send({'event': 'resync'}, sender)
-                host['incarnation'] = incarnation
-                host['inseq'] = 0
-                return
-
-        # Update the model with changes from Twilight.
-        for table, pkey, state, part in changes:
-            if part is None:
-                host['current'].setdefault(table, set()).discard(pkey)
-            else:
-                host['current'].setdefault(table, set()).add(pkey)
-
-            self.model[table].update_row(pkey, state, part)
-
-        # Bump the sequence and save current incarnation of the peer.
-        host['incarnation'] = incarnation
-        host['inseq'] += 1
+    def process_event(self, data):
+        self.hosts[data['uuid']].process_changes(data)
 
 
     def apply_changes(self, data):
@@ -208,74 +175,45 @@ class Manager(object):
         # Get the routing key for the host. It is different from it's uuid.
         if host not in self.hosts:
             return
-
-        route = self.hosts[host]['route']
-
-        # Send a nice, warm message with all the goodies.
-        self.router.send({
-            'event': 'update',
-            'incarnation': self.incarnation,
-            'seq': self.hosts[host]['outseq'],
-            'changes': changes,
-        }, route)
-        self.hosts[host]['outseq'] += 1
-
-
-    def twilight_resync(self, host, sender):
-        """Sends complete desired state for given Twilight."""
-        print 'sending complete desired state for %s' % host
-
-        changes = []
-        for name, pkey in self.host_to_row.get(host, []):
-            table = self.model[name]
-            changes.append((name, pkey, 'desired', table[pkey].desired))
-
-        self.router.send({
-            'incarnation': self.incarnation,
-            'seq': 0,
-            'event': 'update',
-            'changes': changes,
-        }, sender)
-
-        if host in self.hosts:
-            self.hosts[host]['outseq'] = 1
-
+        self.hosts[host].send_changes(changes)
 
     def add_watches(self):
         """Install event handlers that manage row ownership."""
 
-        def assign(table, row, host):
-            self.row_to_host.setdefault((table.name, row.pkey), set()).add(host)
-            self.host_to_row.setdefault(host, set()).add((table.name, row.pkey))
+        def assign(table, row, hosts=None):
+            """ Add row for host or hosts
+                If hosts is none, this will assign given row to all known hosts """
+            def _set_state(table, row, host):
+                """ Add row to single specific host """
+                self.row_to_host.setdefault((table.name, row.pkey), set()).add(host)
+                self.hosts.setdefault(host, Twilight(host, self.model)).add_row(table.name, row.pkey)
 
-        def after_host_update(table, row):
-            assign(table, row, row.pkey)
+            if hosts is None:
+                for host in self.hosts:
+                    _set_state(table, row, host)
+            elif isinstance(hosts, list):
+                for host in hosts:
+                    _set_state(table, row, host)
+            else:
+                    _set_state(table, row, hosts)
 
-        def after_host_owned_row_update(table, row):
-            assign(table, row, row.desired['host'])
-
-        def after_nic_role_update(table, row):
-            bond = self.model['bond'][row.desired['bond']]
-            assign(table, row, bond.desired['host'])
-
-
-        def watch(table, handler):
+        def watch(table):
+            handler = table.get_watch_handler(self.model, assign)
             @wraps(handler)
             def wrapper(table, row):
                 host = self.row_to_host.pop((table.name, row.pkey), set([None])).pop()
-                self.host_to_row.get(host, set()).discard((table.name, row.pkey))
+                if host:
+                    self.hosts[host].delete_row(table.name, row.pkey)
                 if row.desired is not None:
                     handler(table, row)
-
             table.on_after_row_update(wrapper)
             for row in table.itervalues():
                 handler(table, row)
 
-        watch(self.model['host'], after_host_update)
-        watch(self.model['bond'], after_host_owned_row_update)
-        watch(self.model['nic'], after_host_owned_row_update)
-        watch(self.model['nic_role'], after_nic_role_update)
-
+        # Watch these tables for changes
+        watch_tables = ['host', 'bond', 'nic', 'nic_role', 'storage_pool', 'disk']
+        for table_name in watch_tables:
+            watch(self.model[table_name])
 
     def list_collection(self, path, keys):
         """

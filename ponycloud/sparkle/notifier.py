@@ -1,11 +1,14 @@
 #!/usr/bin/python -tt
+from autobahn.wamp import WampServerFactory, \
+    WampCraServerProtocol
 
-from autobahn.wamp import WampServerFactory, WampCraServerProtocol, exportRpc
-from autobahn.websocket import listenWS
-from ponycloud.sparkle.auth import verify_token
+from twisted.internet import reactor
+from auth import extract_token
 from simplejson import loads
+from ponycloud.common import schema
 
 __all__ = ['Notifier']
+
 
 class Notifier(WampServerFactory):
     # Used for model lazy loading
@@ -19,55 +22,84 @@ class Notifier(WampServerFactory):
         self.dispatch('{}/{}'.format(self.topic_uri, tenant_uuid), event)
 
     def start(self):
+        """
+        Main method called on start of the notifier. This method creates hooks in model used
+        for the distribution of notifications.
+
+        """
         def make_model_handler(operation):
             def model_handler(table, row):
-                allowed = row.get_allowed(table, self.model)
-                to_publish = {'operation': operation,
-                            'type': table.name,
-                            'pkey-name': table.pkey,
-                            'pkey': row.pkey,
-                            'desired': row.desired,
-                            'current': row.current}
-                # Publish event to all interested tenants
-                for channel in allowed:
-                    self.publish(channel, to_publish)
-                # ...and report to alicorns
-                self.publish('alicorns', to_publish)
+
+                allowed = row.get_tenants()
+                to_publish = {
+                    'operation': operation,
+                    'type': table.name,
+                    'pkey-name': table.pkey,
+                    'pkey': row.pkey,
+                    'desired': row.desired,
+                    'current': row.current
+                }
+
+                # If it's public, send to public...
+                if 'public' in schema[table.name]:
+                    self.publish('public', to_publish)
+                else:
+                    if allowed:
+                        # ..publish event to all interested tenants
+                        for tenant in allowed:
+                            self.publish(tenant, to_publish)
+                    else:
+                        # ...and report to alicorns
+                        self.publish('alicorns', to_publish)
+
             return model_handler
 
-        for item in self.model:
-            self.model[item].on_create_state(make_model_handler('create'))
-            self.model[item].on_update_state(make_model_handler('update'))
-            self.model[item].on_before_delete_state(make_model_handler('delete'))
-        listenWS(self)
+        for table_name, table in self.model.iteritems():
+            table.on_create_state(make_model_handler('create'))
+            table.on_update_state(make_model_handler('update'))
+            table.on_before_delete_state(make_model_handler('delete'))
 
-    # Function for determining permissions for given username
-    # TODO Now it's just a list of tenants the user is member of
-    def get_permissions(self, username):
-        tenants = []
-        # Determine if user is alicorn or not
-        alicorn = self.model['user'][username].desired['alicorn']
-        # Get users membership
-        rows = self.model['member'].list(user=username)
-        if rows is None:
-            return None
-        for row in rows:
-            tenants.append(row.desired['tenant'])
+        reactor.listenTCP(self.port, self)
 
+    def get_channels(self, tenants=[], public=False, alicorn=False):
+        """
+        Create pubsub channels definition that are used for publishing notifications
+        """
+
+        def get_channel(name):
+            """
+            Generate template for each channel
+            """
+            return {'uri': '{}/{}'.format(self.topic_uri, name),
+                    'prefix': True,
+                    'pub': False,
+                    'sub': True}
+
+        pubsub = []
+        # Public notifications
+        if public:
+            pubsub.append(get_channel('public'))
+        # Tenant specific
+        for tenant in tenants:
+            pubsub.append(get_channel(tenant))
+        # Alicorns only
+        if alicorn:
+            pubsub.append(get_channel('alicorns'))
+
+        return {'pubsub': pubsub}
+
+    # Function for determining permissions for given token
+    def get_permissions(self, token):
+        if 'tenant' in token:
+            return self.get_channels(tenants=[token['tenant']], public=True)
         else:
-            pubsub = []
-            for tenant in tenants:
-                pubsub.append({'uri': '{}/{}'.format(self.topic_uri,tenant),
-                                       'prefix': True,
-                                       'pub': False,
-                                       'sub': True})
-            if alicorn:
-                pubsub.append({'uri': '{}/{}'.format(self.topic_uri,'alicorns'),
-                                       'prefix': True,
-                                       'pub': False,
-                                       'sub': True})
+            username = token['user']
+            # Determine if user is alicorn or not
+            # TODO user might be already gone
+            alicorn = self.model['user'][username].desired['alicorn']
+            pub_sub = self.get_channels(alicorn=alicorn)
+            return pub_sub
 
-            return { username: {'pubsub': pubsub} }
 
 class NotificationsProtocol(WampCraServerProtocol):
     """
@@ -75,39 +107,28 @@ class NotificationsProtocol(WampCraServerProtocol):
     """
 
     def onSessionOpen(self):
-      self.clientAuthTimeout = 0
-      self.clientAuthAllowAnonymous = False
-      WampCraServerProtocol.onSessionOpen(self)
-      self.registerMethodForRpc("http://api.wamp.ws/procedure#auth",
-                               self,
-                               NotificationsProtocol.auth)
-
-    def getAuthPermissions(self, username):
-      ## return permissions which will be granted for the auth key
-      ## when the authentication succeeds
-      permissions = self.factory.get_permissions(username)
-      if permissions is None:
-          return None
-      else:
-          return {'permissions': permissions}
+        self.clientAuthTimeout = 0
+        self.clientAuthAllowAnonymous = False
+        WampCraServerProtocol.onSessionOpen(self)
+        self.registerMethodForRpc("http://api.wamp.ws/procedure#auth",
+                                  self,
+                                  NotificationsProtocol.auth)
 
     def auth(self, token):
-        if token is None:
-            return None
+        """
+        Called from client to give him permissions
+        to pubsub channels.
+        """
+        try:
+            token = extract_token(token, self.factory.apikey)
+            token = loads(token)
+        except ValueError:
+            return False
 
-        token = loads(token.decode('base64'))
-
-        if verify_token(token, self.factory.passkey):
-            # TODO Many things could go wrong here
-            username = token[0].split(':')[1]
-            self._clientAuthenticated = True
-            self.onAuthenticated(username)
-            return self.getAuthPermissions(username)
-
-    def onAuthenticated(self, authKey):
-      ## register PubSub topics from the auth permissions
-      perms = self.getAuthPermissions(authKey)
-      self.registerForPubSubFromPermissions(perms['permissions'][authKey])
+        self._clientAuthenticated = True
+        permissions = self.factory.get_permissions(token)
+        self.registerForPubSubFromPermissions(permissions)
+        return permissions
 
 # vim:set sw=4 ts=4 et:
 # -*- coding: utf-8 -*-

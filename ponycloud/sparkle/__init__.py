@@ -7,7 +7,7 @@ from dbdict import *
 from events import *
 from listener import *
 from manager import *
-#from notifier import *
+from notifier import *
 from patch import *
 from rest import *
 
