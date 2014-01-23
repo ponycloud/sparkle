@@ -136,6 +136,20 @@ def make_sparkle_app(manager):
                 data = blockingCallFromThread(reactor, manager.list_collection, path, keys)
                 return remove_nulls(data)
 
+            if 'POST' == flask.request.method:
+                data = loads(flask.request.data)
+
+                if 'desired' in data:
+                    pkey = data['desired'].get(schema[jpath[-1]]['pkey'], 'POST')
+                else:
+                    pkey = 'POST'
+
+                post_path = jpath + [pkey]
+                jschema = make_json_schema(cache, credentials, True)
+                validate_dbdict_fragment(jschema, {}, post_path)
+                patch = [{'op': 'add', 'path': post_path, 'value': data}]
+                return {'uuids': apply_valid_patch(patch)}
+
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, keys, cache, jpath)
 
