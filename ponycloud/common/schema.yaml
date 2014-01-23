@@ -47,9 +47,12 @@
 # :    Same as `tenant/owner` but the level can be `member` for
 #      modifications and even `operator` for read-only access.
 #
-# *user*
+# *user/rw*
 # :    Entity can only be accessed with user token matching user
 #      email in the path (assumed to be null if not specified).
+#
+# *user/ro*
+# :    Same as `user/rw`, but user cannot make any changes.
 #
 
 address:
