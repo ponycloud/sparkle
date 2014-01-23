@@ -13,10 +13,10 @@ import re
 class CollectionProxy(object):
     """Remote collection proxy."""
 
-    def __init__(self, celly, uri, prefix=()):
+    def __init__(self, celly, uri, schema):
         self.celly = celly
         self.uri = uri
-        self.prefix = prefix
+        self.schema = schema
 
     def __iter__(self):
         return iter(self.list)
@@ -26,19 +26,19 @@ class CollectionProxy(object):
             return self.list[key]
 
         child_uri = '%s%s' % (self.uri, quote(key, ''))
-        return EntityProxy(self.celly, child_uri, self.prefix)
+        return EntityProxy(self.celly, child_uri, self.schema)
 
     def _get_key(self, item):
         if 'desired' in item:
-            return item['desired'][self.celly.paths[self.prefix]['pkey']]
-        return item['current'][self.celly.paths[self.prefix]['pkey']]
+            return item['desired'][self.schema['pkey']]
+        return item['current'][self.schema['pkey']]
 
     @property
     def list(self):
         out = []
         for key, value in self.celly.request(self.uri).iteritems():
             child_uri = '%s%s' % (self.uri, quote(key, ''))
-            out.append(EntityProxy(self.celly, child_uri, self.prefix))
+            out.append(EntityProxy(self.celly, child_uri, self.schema))
         return out
 
     def post(self, data):
@@ -54,13 +54,15 @@ class CollectionProxy(object):
 class EntityProxy(object):
     """Remote entity proxy."""
 
-    def __init__(self, celly, uri, prefix=()):
+    def __init__(self, celly, uri, schema):
         self.celly = celly
         self.uri = uri
+        self.schema = schema
 
-        for path, info in self.celly.iter_child_paths(prefix):
-            col_uri = '%s/%s/' % (self.uri, quote(path[-1], ''))
-            setattr(self, path[-1], CollectionProxy(self.celly, col_uri, path))
+        for name, child in self.schema['children'].iteritems():
+            uri = '%s/%s/' % (self.uri, quote(name, ''))
+            name = name.replace('-', '_')
+            setattr(self, name, CollectionProxy(self.celly, uri, child))
 
     @property
     def desired(self):
@@ -92,9 +94,10 @@ class Celly(object):
         self.http = Http()
         self.headers = headers
 
-        for path, info in self.iter_child_paths():
-            uri = '%s/%s/' % (base_uri, quote(path[-1], ''))
-            setattr(self, path[-1], CollectionProxy(self, uri, path))
+        for name, child in self.schema['children'].iteritems():
+            uri = '%s/%s/' % (base_uri, quote(name, ''))
+            name = name.replace('-', '_')
+            setattr(self, name, CollectionProxy(self, uri, child))
 
     def request(self, uri, method='GET', body=None, headers={}):
         bh = self.headers.copy()
@@ -124,19 +127,12 @@ class Celly(object):
         raise Exception('request failed')
 
     @property
-    def paths(self):
+    def schema(self):
         if not hasattr(self, '_schema'):
-            paths = self.request('%s/schema' % self.uri)['paths']
-            self._paths = {tuple(k.split('/')): v \
-                           for k, v in paths.iteritems()}
-
-        return self._paths
-
-    def iter_child_paths(self, prefix=()):
-        for path, info in self.paths.iteritems():
-            if len(path) == len(prefix) + 1:
-                if prefix == path[:len(prefix)]:
-                    yield path, info
+            self._schema = {
+                'children': self.request('%s/schema' % (self.uri,))
+            }
+        return self._schema
 
 
 # vim:set sw=4 ts=4 et:

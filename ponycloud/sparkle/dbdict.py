@@ -29,19 +29,19 @@ hierarchy.  Namely, the structure looks like this:
                                `- desired: Desired
                                `- children: Children (recursively)
 
-We start with a Children(parent_table=None, parent_pkey=None) instance
+We start with a Children(db, schema.root, pkey=None) instance
 and recurse according to schema and database contents.
 For example Collections of Children of a concrete Entity will only
 contain children matched by the parent relation.
 """
 
 
-def validate_dbdict_fragment(schema, fragment, path=[]):
+def validate_dbdict_fragment(jschema, fragment, path=[]):
     """
     Wrap selected fragment with several dicts representing the path
     leading to it and then validate it according to given dbdict schema.
 
-    :param schema:    The schema to use for validation.  Use make_schema().
+    :param jschema:   JSON schema to use for validation.  Use make_schema().
     :param fragment:  The document fragment such as {'uuid': '...', 'foo': 1}.
     :param path:      List of path components such as ['host', 'xy', 'desired'].
 
@@ -51,12 +51,15 @@ def validate_dbdict_fragment(schema, fragment, path=[]):
     for part in reversed(path):
         fragment = {part: fragment}
 
-    jsonschema.validate(fragment, schema)
+    jsonschema.validate(fragment, jschema)
 
 
 def is_uuid(uuid):
+    if not isinstance(uuid, basestring):
+        return False
+
     try:
-        return UUID(uuid) and True
+        return re.match('[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}', uuid) and True
     except ValueError:
         return False
 
@@ -73,12 +76,14 @@ def preprocess_dbdict_fragment(fragment, path, uuids, safe):
     for part in reversed(path):
         fragment = {part: fragment}
 
-    Children.preprocess(fragment, uuids, safe)
+    Children.preprocess(fragment, uuids, schema.root, safe)
 
     for i in xrange(len(path)):
         key = fragment.keys()[0]
         fragment = fragment[key]
         path[i] = key
+
+    return fragment
 
 
 def preprocess_dbdict_patch(patch):
@@ -90,7 +95,7 @@ def preprocess_dbdict_patch(patch):
         value = op.get('value', {})
         path  = op.get('path', [])
 
-        preprocess_dbdict_fragment(value, path, uuids, ('test' != op['op']))
+        op['value'] = preprocess_dbdict_fragment(value, path, uuids, ('test' != op['op']))
 
         if 'from' in op:
             preprocess_dbdict_fragment({}, op['from'], uuids, False)
@@ -98,46 +103,85 @@ def preprocess_dbdict_patch(patch):
     return uuids
 
 
-def make_schema(tenant=None, alicorn=False, write=False):
+def make_schema(credentials, write=False):
     """
     Create JSON Schema for specific conditions.
 
-    :param tenant:   Include portions protected by given tenant token.
-    :param alicorn:  Superuser access override, include everything.
-    :param write:    Hide read-only parts when True.
+    :param credentials: Access credentials that can contain either
+                        authorization for a particular tenant,
+                        particular user, whole system or nothing.
+
+    :param write:       Toggles between write-only and read-only JSON schema.
+
+    :returns: Schema
     """
 
-    def recurse(path=[]):
+    alicorn = credentials.get('alicorn', False)
+    tenant  = credentials.get('tenant')
+    role    = credentials.get('role')
+    user    = credentials.get('user')
+
+    def recurse(endpoint):
         result = {
             'type': 'object',
             'additionalProperties': False,
             'properties': {},
         }
 
-        for tname, table in schema.iteritems():
-            if 0 == len(path):
-                if 0 != len(table['parents']) and not table.get('public'):
-                    continue
+        for name, child in endpoint.children.iteritems():
+            # Include all rows if allowed access to that table by default.
+            key = 'patternProperties'
+            pattern = '.*'
+
+            if alicorn:
+                # Alicorns override all access control.
+                pass
+
             else:
-                if path[-1] not in [p[1] for p in table['parents']]:
+                if child.access == 'protected':
+                    # Alicorns-only endpoints.
                     continue
 
-            if not alicorn:
-                if tname == 'tenant' or 'tenant' in path:
-                    if not tenant:
+                if write and child.access == 'shared':
+                    # Alicorns-write others-read endpoints.
+                    continue
+
+                if child.table.name == 'tenant':
+                    # Special case for tenant isolation.
+                    # Needs correct tenant credentials for access.
+                    if tenant is None:
                         continue
-                else:
-                    if write or not table.get('public'):
+                    key = 'properties'
+                    pattern = tenant
+
+                if child.access == 'tenant/owner' and role != 'owner':
+                    # Endpoints limited to tenant owners.
+                    continue
+
+                if child.access == 'tenant/user' and role == 'operator':
+                    # Operators cannot write to tenant data.
+                    if write:
                         continue
 
-            if alicorn or tname != 'tenant':
-                key = 'patternProperties'
-                pattern = '.*'
-            else:
-                key = 'properties'
-                pattern = tenant
+                if child.table.name == 'user':
+                    # Special case for user isolation.
+                    # Needs correct user credentials for access.
+                    if user is None:
+                        continue
+                    key = 'properties'
+                    pattern = user
 
-            result['properties'][tname] = {
+                if child.access == 'user/rw' and user is None:
+                    # When valid user is required for access
+                    continue
+
+                if child.access == 'user/ro' and user is None:
+                    # When valid user is required for read-only access
+                    # and all writes are forbidden.
+                    if write:
+                        continue
+
+            result['properties'][name] = {
                 'type': 'object',
                 key: {
                     pattern: {
@@ -145,7 +189,7 @@ def make_schema(tenant=None, alicorn=False, write=False):
                         'additionalProperties': False,
                         'properties': {
                             'desired': {'type': 'object'},
-                            'children': recurse(path + [tname]),
+                            'children': recurse(child),
                         },
                     },
                 },
@@ -153,7 +197,7 @@ def make_schema(tenant=None, alicorn=False, write=False):
 
         return result
 
-    return recurse()
+    return recurse(schema.root)
 
 
 class DbDict(MutableMapping, dict):
@@ -224,23 +268,24 @@ class Children(DbDict):
     parent entity is passed to Collection instances it produces.
     """
 
-    def __init__(self, db, parent_table=None, parent_pkey=None):
+    def __init__(self, db, schema, pkey=None):
         """
-        :param db:            Reference to the SQLSoup database proxy.
-        :param parent_table:  Name of a valid parent table from schema.
-        :param parent_pkey:   Parent primary key value to restrict children.
+        :param db:     Reference to the SQLSoup database proxy.
+        :param schema: Parent endpoint schema information.
+        :param pkey:   Parent primary key value to restrict children.
         """
         self.db = db
-        self.parent_table = parent_table
-        self.parent_pkey = parent_pkey
+        self.schema = schema
+        self.pkey = pkey
 
     def __getitem__(self, key):
         """Retrieve child Collection proxy."""
 
         if key not in self:
-            raise KeyError('%s not a child of %s' % (key, self.parent_table))
+            raise KeyError('%s not a child of %s' \
+                                % (key, self.schema.table.name))
 
-        return Collection(self.db, key, self.parent_table, self.parent_pkey)
+        return Collection(self.db, self.schema.children[key], self.pkey)
 
     def __contains__(self, key):
         """Determine whether the key is a valid child collection."""
@@ -253,33 +298,25 @@ class Children(DbDict):
         raise TypeError('list of children collections is immutable')
 
     def __iter__(self):
-        """Name all tables that have our entity table as their parent."""
+        """Iterate over names of all non-virtual child endpoints."""
 
-        for name, entity in schema.iteritems():
-            if self.parent_table is None:
-                # When self.parent_table is None, we are interested only in
-                # tables that are at the root.
-                if len(entity['parents']) == 0:
-                    yield name
-            else:
-                for local_field, remote_table in entity['parents']:
-                    if remote_table == self.parent_table:
-                        yield name
+        for name, child in self.schema.children.iteritems():
+            if not child.table.virtual:
+                yield name
 
     @staticmethod
-    def preprocess(fragment, uuids, safe):
+    def preprocess(fragment, uuids, cschema, safe):
         for k, v in fragment.iteritems():
-            Collection.preprocess(v, uuids, safe)
+            Collection.preprocess(v, uuids, cschema.children[k], safe)
 
 
 class Collection(DbDict):
     """Multiple entities of a kind restricted to a particular parent."""
 
-    def __init__(self, db, table, parent_table, parent_pkey):
+    def __init__(self, db, schema, pkey):
         self.db = db
-        self.table = table
-        self.parent_table = parent_table
-        self.parent_pkey = parent_pkey
+        self.schema = schema
+        self.pkey = pkey
 
     def __getitem__(self, key):
         """
@@ -288,57 +325,67 @@ class Collection(DbDict):
         """
 
         try:
-            child = getattr(self.db, self.table).get(key)
+            # Load the child entity for additional checking.
+            child = getattr(self.db, self.schema.table.name).get(key)
         except UnmappedInstanceError:
-            raise KeyError('%s/%s not found' % (self.table, key))
+            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
 
-        if self.parent_table is None:
-            for local_field, remote_table in schema[self.table]['parents']:
-                if getattr(child, local_field) is not None:
-                    raise KeyError('%s/%s not found' % (self.table, key))
-        else:
-            fkey = schema.get_fkey(self.table, self.parent_table)
-            if getattr(child, fkey) != self.parent_pkey:
-                raise KeyError('%s/%s not found' % (self.table, key))
+        # Verify that all filters are met.
+        for field, value in self.schema.filter.iteritems():
+            if getattr(child, field) != value:
+                raise KeyError('%s/%s not found' \
+                                    % (self.schema.table.name, key))
 
-        return Entity(self.db, self.table, key)
+        # If not at the root, verify that this entity belongs to
+        # parent it have been loaded from.
+        if self.schema.parent.table is not None:
+            fkey = self.schema.parent.table.name
+            if getattr(child, fkey) != self.pkey:
+                raise KeyError('%s/%s not found' \
+                                    % (self.schema.table.name, key))
+
+        # The entity provably belongs to this parent, return it.
+        return Entity(self.db, self.schema, key)
 
     def __iter__(self):
         """Retrieve child keys restricted to collection parent."""
 
-        query = getattr(self.db, self.table)
+        # Prepare simple query on this table.
+        query = getattr(self.db, self.schema.table.name)
 
-        if self.parent_table is None:
-            for local_field, remote_table in schema[self.table]['parents']:
-                query.filter_by(**{local_field: None})
-        else:
-            fkey = schema.get_fkey(self.table, self.parent_table)
-            query.filter_by(**{fkey: self.parent_pkey})
+        # Apply filters from schema.
+        query.filter_by(**self.schema.filter)
 
-        pkey = schema[self.table]['pkey']
+        # If we have a parent, relate to it using a foreign key column
+        # that is by convention called same as the parent table.
+        if self.schema.parent.table is not None:
+            query.filter_by(**{self.schema.table.name: self.pkey})
+
+        # Return primary keys of all queried rows.
         for row in query.all():
-            yield getattr(row, pkey)
+            yield getattr(row, self.schema.pkey)
 
     def add(self, key, value):
         """Insert new entity to the collection."""
 
         desired = dict(value['desired'])
-
-        pkey = schema[self.table]['pkey']
+        pkey = self.schema.pkey
 
         if pkey in desired and desired[pkey] != key:
             raise KeyError('%s/%s/desired/%s (%s) does not match' \
-                            % (self.table, key, pkey, desired[pkey]))
+                                % (self.schema.table.name,
+                                   key, pkey, desired[pkey]))
 
         desired[pkey] = key
 
-        if self.parent_table:
-            fkey = schema.get_fkey(self.table, self.parent_table)
-            parent_pkey = desired.setdefault(fkey, self.parent_pkey)
+        if self.schema.parent.table is not None:
+            fkey = self.schema.parent.table.name
+            parent_pkey = desired.setdefault(fkey, self.pkey)
 
-            if parent_pkey != self.parent_pkey:
+            if parent_pkey != self.pkey:
                 raise ValueError('cannot add %s/%s with invalid parent %s' \
-                                    % (self.table, key, parent_pkey))
+                                    % (self.schema.table.name,
+                                       key, parent_pkey))
 
         getattr(self.db, self.table).insert(**desired)
         self.db.flush()
@@ -346,40 +393,47 @@ class Collection(DbDict):
     def __delitem__(self, key):
         """Delete child entity by it's primary key."""
 
-        assert self[key]
+        if key not in self:
+            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
 
         try:
-            self.db.delete(getattr(self.db, self.table).get(key))
+            self.db.delete(getattr(self.db, self.schema.table.name).get(key))
             self.db.flush()
         except UnmappedInstanceError:
-            raise KeyError('%s/%s not found' % (self.table, key))
+            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
 
     @staticmethod
-    def preprocess(fragment, uuids, safe):
-        for k, v in list(fragment.iteritems()):
-            if not is_uuid(k):
-                if k in uuids:
-                    nk = uuids[k]
-                else:
-                    nk = uuids.setdefault(k, str(uuid4()))
+    def preprocess(fragment, uuids, cschema, safe):
+        for k, v in fragment.items():
+            # Only enforce on uuid or composite keys.
+            if cschema.table.pkey == 'uuid' or \
+               not isinstance(cschema.table.pkey, basestring):
 
-                fragment[nk] = v
-                del fragment[k]
+                # If the key is not a valid uuid, treat it as a placeholder
+                # and generate new replacement uuid.
+                if not is_uuid(k):
+                    if k in uuids:
+                        nk = uuids[k]
+                    else:
+                        nk = uuids.setdefault(k, str(uuid4()))
 
-            Entity.preprocess(v, uuids, safe)
+                    fragment[nk] = v
+                    del fragment[k]
+
+            Entity.preprocess(fragment[k], uuids, cschema, safe)
 
 
 class Entity(DbDict):
     """Container holding both desired state and children."""
 
-    def __init__(self, db, table, pkey):
+    def __init__(self, db, schema, pkey):
         self.db = db
-        self.table = table
+        self.schema = schema
         self.pkey = pkey
 
         self.data = {
-            'desired': Desired(self.db, self.table, self.pkey),
-            'children': Children(self.db, self.table, self.pkey),
+            'desired': Desired(db, schema, pkey),
+            'children': Children(db, schema, pkey),
         }
 
     def __iter__(self):
@@ -389,30 +443,32 @@ class Entity(DbDict):
         try:
             return self.data[key]
         except KeyError:
-            raise KeyError('%s/%s/%s not found' % (self.table, self.pkey, key))
+            raise KeyError('%s/%s/%s not found' \
+                                % (self.schema.table.name, self.pkey, key))
 
     def __delitem__(self, key):
-        try:
-            self.data[key]
-        except KeyError:
-            raise KeyError('%s/%s/%s not found' % (self.table, self.pkey, key))
+        if key not in self.data:
+            raise KeyError('%s/%s/%s not found' \
+                                % (self.schema.table.name, self.pkey, key))
 
-        raise TypeError('cannot remove %s/%s/%s' % (self.table, self.pkey, key))
+        raise TypeError('cannot remove %s/%s/%s' \
+                            % (self.schema.table.name, self.pkey, key))
 
     def add(self, key, value):
         if key in self.data:
             raise KeyError('%s/%s/%s already exists' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
-        raise TypeError('%s/%s/%s cannot exist' % (self.table, self.pkey, key))
+        raise TypeError('%s/%s/%s cannot exist' \
+                            % (self.schema.table.name, self.pkey, key))
 
     @staticmethod
-    def preprocess(fragment, uuids, safe):
+    def preprocess(fragment, uuids, eschema, safe):
         for k, v in fragment.iteritems():
             if 'desired' == k:
-                Desired.preprocess(v, uuids, safe)
+                Desired.preprocess(v, uuids, eschema, safe)
             elif 'children' == k:
-                Children.preprocess(v, uuids, safe)
+                Children.preprocess(v, uuids, eschema, safe)
 
 
 class Desired(DbDict):
@@ -421,13 +477,13 @@ class Desired(DbDict):
     Provides access to columns of the database row.
     """
 
-    def __init__(self, db, table, pkey):
+    def __init__(self, db, schema, pkey):
         self.db = db
-        self.table = table
+        self.schema = schema
         self.pkey = pkey
 
     def get_soup_table(self):
-        return getattr(self.db, self.table)
+        return getattr(self.db, self.schema.table.name)
 
     def get_soup_entity(self):
         return self.get_soup_table().get(self.pkey)
@@ -454,7 +510,7 @@ class Desired(DbDict):
         # unexpected such as a builtin method.  So check key validity too.
         if value is None or key not in self:
             raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
         return value
 
@@ -465,20 +521,19 @@ class Desired(DbDict):
         primary key because they should be immutable.
         """
 
-        if key == schema[self.table]['pkey']:
+        if key == self.schema.table.pkey:
             raise TypeError('%s/%s/desired/%s is immutable primary key' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
         entity = self.get_soup_entity()
 
         if getattr(entity, key, None) is None or key not in self:
             raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
-        for local_field, remote_table in schema[self.table]['parents']:
-            if local_field == key:
-                raise KeyError('%s/%s/desired/%s is immutable' \
-                                    % (self.table, self.pkey, key))
+        if key == self.schema.parent.table.name:
+            raise KeyError('%s/%s/desired/%s is immutable' \
+                                % (self.schema.table.name, self.pkey, key))
 
         setattr(entity, key, None)
         self.db.flush()
@@ -488,12 +543,11 @@ class Desired(DbDict):
 
         if key in self:
             raise KeyError('%s/%s/desired/%s already exists' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
-        for local_field, remote_table in schema[self.table]['parents']:
-            if local_field == key:
-                raise KeyError('%s/%s/desired/%s is immutable' \
-                                    % (self.table, self.pkey, key))
+        if key == self.schema.parent.table.name:
+            raise KeyError('%s/%s/desired/%s is immutable' \
+                                % (self.schema.table.name, self.pkey, key))
 
         entity = self.get_soup_entity()
         setattr(entity, key, value)
@@ -504,33 +558,55 @@ class Desired(DbDict):
 
         if value is None:
             raise ValueError('%s/%s/desired/%s cannot be null' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
         if key not in self:
             raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.table, self.pkey, key))
+                                % (self.schema.table.name, self.pkey, key))
 
-        for local_field, remote_table in schema[self.table]['parents']:
-            if local_field == key:
-                raise KeyError('%s/%s/desired/%s is immutable' \
-                                    % (self.table, self.pkey, key))
+        if key == self.schema.parent.table.name:
+            raise KeyError('%s/%s/desired/%s is immutable' \
+                                % (self.schema.table.name, self.pkey, key))
 
         entity = self.get_soup_entity()
         setattr(entity, key, value)
         self.db.flush()
 
     @staticmethod
-    def preprocess(fragment, uuids, safe):
+    def preprocess(fragment, uuids, dschema, safe):
+        # Generate set of keys that should be uuids.
+        # Start with a possibly 'uuid' primary key.
+        uuid_pkeys = set(['uuid'])
+        uuid_fkeys = set()
+
+        # Include all composite primary key fields if applicable.
+        if not isinstance(dschema.table.pkey, basestring):
+            for pkey in dschema.table.pkey:
+                uuid_pkeys.add(pkey)
+
+        # And definitely add all foreign keys that have an 'uuid'
+        # primary key as their target.
+        for fkey in dschema.table.fkeys:
+            if schema.tables[fkey].pkey == 'uuid':
+                uuid_fkeys.add(fkey)
+
+        # Adjust fields as needed.
         for k, v in fragment.iteritems():
-            if 'uuid' == k:
+            if k in uuid_pkeys or k in uuid_fkeys:
                 if is_uuid(v):
-                    if safe:
-                        raise ValueError('user-defined uuid %r' % (v,))
+                    if k in uuid_pkeys and safe:
+                        # Primary keys cannot be set by the user.
+                        raise ValueError('user-defined pkey uuid %r' % (v,))
                 else:
-                    if v in uuids:
-                        nv = uuids[v]
-                    else:
-                        nv = uuids.setdefault(v, str(uuid4()))
+                    try:
+                        if v in uuids:
+                            nv = uuids[v]
+                        else:
+                            nv = uuids.setdefault(v, str(uuid4()))
+                    except TypeError:
+                        # Ignore problems with unhashable data from user,
+                        # we will fail later in a more meaningful way.
+                        continue
 
                     fragment[k] = nv
 

@@ -2,62 +2,95 @@
 
 import yaml
 import os.path
-import jsonschema
 
 __all__ = ['Schema', 'schema']
 
 
-class Schema(dict):
-    def get_fkey(self, local_table, remote_table):
-        """
-        Retrieve foreign key pointing from local_table to remote_table.
-        """
+class Root(object):
+    def __init__(self):
+        self.table  = None
+        self.access = 'private'
+        self.filter = {}
+        self.parent = None
+        self.children = {}
 
-        assert local_table in self,  'unknown table %r' % (local_table,)
-        assert remote_table in self, 'unknown table %r' % (remote_table,)
+    @property
+    def public(self):
+        return {name: child.public \
+                for name, child in self.children.iteritems() \
+                if child.access not in ('private',)}
 
-        for local_column, parent_table in self[local_table]['parents']:
-            if parent_table == remote_table:
-                return local_column
 
-        raise KeyError('no foreign key relation of %s to %s' \
-                        % (local_table, remote_table))
+class Endpoint(object):
+    def __init__(self, table, path, mount):
+        self.table  = table
+        self.access = mount['access']
+        self.filter = mount.get('filter', {})
+        self.parent = None
+        self.children = {}
 
-    def iter_paths(self, prefix=()):
-        """
-        Iterate over all possible paths from parent/child relations.
-        Paths are returned as tuples of entity names.
+    @property
+    def public(self):
+        return {
+            'pkey': self.table.pkey,
+            'fkeys': list(self.table.fkeys),
+            'table': self.table.name,
+            'access': self.access,
+            'children': {name: child.public \
+                         for name, child in self.children.iteritems() \
+                         if child.access not in ('private',)}
+        }
 
-        For example::
 
-            iter([
-                ('cpu_profile'),
-                ('cpu_profile', 'instance'),
-                ...
-            ])
-        """
+class Table(object):
+    def __init__(self, tname, table):
+        self.name  = tname
+        self.pkey  = table['pkey']
+        self.index = set(table.get('index', []))
+        self.fkeys = set()
+        self.virtual = table.get('virtual', False)
+        self.endpoints = {}
 
-        if 0 == len(prefix):
-            for tname, table in schema.iteritems():
-                if 0 == len(table['parents']):
-                    for sub in self.iter_paths((tname,)):
-                        yield sub
+        if isinstance(self.pkey, basestring):
+            self.index.add(self.pkey)
         else:
-            yield prefix
-            for tname, table in schema.iteritems():
-                if prefix[-1] in [rt for lf, rt in table['parents']]:
-                    for sub in self.iter_paths(prefix + (tname,)):
-                        yield sub
+            for key in self.pkey:
+                self.index.add(key)
+
+
+class Schema(object):
+    def __init__(self, data):
+        self.root = Root()
+        self.endpoints = {(): self.root}
+        self.tables = {}
+
+        for tname, table in data.iteritems():
+            self.tables[tname] = Table(tname, table)
+
+        for tname, info in data.iteritems():
+            table = self.tables[tname]
+            for strpath, mount in info['mount'].iteritems():
+                if mount['access'] != 'private':
+                    path = tuple(strpath.split('/')[1:])
+                    self.endpoints[path] = Endpoint(table, path, mount)
+
+        for path, mount in self.endpoints.iteritems():
+            if len(path) > 0:
+                mount.table.endpoints[path] = mount
+                mount.parent = self.endpoints[path[:-1]]
+                mount.parent.children[path[-1]] = mount
+
+            if mount.parent is not None and mount.parent.table is not None:
+                mount.table.index.add(mount.parent.table.name)
+                mount.table.fkeys.add(mount.parent.table.name)
+
+        del self.endpoints[()]
 
 
 def load_schema():
-    with open(os.path.dirname(__file__) + '/schema.schema.yaml') as fp:
-        schema_schema = yaml.load(fp)
-
     with open(os.path.dirname(__file__) + '/schema.yaml') as fp:
         schema = yaml.load(fp)
 
-    jsonschema.validate(schema, schema_schema)
     return Schema(schema)
 
 

@@ -1,132 +1,301 @@
 %YAML 1.2
 ---
+#
+# API and Model Schema
+# =====================
+#
+# Primary keys are described using the `pkey` property.  They can be either
+# a single value such as `uuid` or composite value such as `[host, disk]`.
+#
+# Mount points for individual tables are split into individual components
+# that need to correspond to parent mount points of other tables or be
+# located at the root.
+#
+# For example:
+#
+#     instance:
+#       pkey: uuid
+#       mount:
+#         /tenant/instance:
+#           access: tenant/shared
+#
+# This example needs address `/tenant` to exist and be mapped to another
+# table.  It is assumed that a property with the same name as the parent
+# table will be used to look up children.  In this case, `instance` has
+# a `tenant` property.
+#
+# Access control makes use of a few access modes attached to mount points.
+# These are:
+#
+# *private*
+# :    This table is not exposed to users in any way.
+#      (But it can be indexed, which is useful.)
+#
+# *protected*
+# :    Entity can only be accessed by alicorns.
+#
+# *shared*
+# :    Entity can only be modified by alicorns but read and referenced by
+#      anyone.  This is useful for things like public images.
+#
+# *tenant/owner*
+# :    Entity can only be accessed with tenant token matching tenant
+#      uuid in the path (assumed to be null if not specified) with
+#      `owner` permission level.
+#
+# *tenant/user*
+# :    Same as `tenant/owner` but the level can be `member` for
+#      modifications and even `operator` for read-only access.
+#
+# *user*
+# :    Entity can only be accessed with user token matching user
+#      email in the path (assumed to be null if not specified).
+#
+
 address:
-  parents:
-    - [network, network]
-    - [vnic, vnic]
   pkey: uuid
+  mount:
+    /tenant/instance/vnic/address:
+      access: tenant/user
+
+    /tenant/switch/network/address:
+      access: tenant/user
+
+    /switch/network/address:
+      access: protected
+      filter:
+        tenant: null
 
 bond:
-  parents:
-    - [host, host]
   pkey: uuid
+  mount:
+    /host/bond:
+      access: protected
 
 cluster:
-  parents:
-    - [tenant, tenant]
   pkey: uuid
+  mount:
+    /tenant/cluster:
+      access: tenant/user
 
 cluster_instance:
-  parents:
-    - [cluster, cluster]
-    - [instance, instance]
   pkey: uuid
+  mount:
+    /tenant/cluster/instance:
+      access: tenant/user
+
+    /tenant/instance/cluster:
+      access: tenant/user
 
 config:
-  parents: []
   pkey: key
+  mount:
+    /config:
+      access: protected
 
 cpu_profile:
-  parents: []
   pkey: uuid
-  public: true
+  mount:
+    /cpu-profile:
+      access: shared
 
 disk:
-  parents:
-    - [storage_pool, storage_pool]
   pkey: id
+  mount:
+    /storage-pool/disk:
+      access: protected
+
+    /disk:
+      access: protected
 
 event:
-  parents:
-    - [host, host]
-    - [instance, instance]
   pkey: hash
+  mount:
+    /event:
+      access: protected
+
+    /host/event:
+      access: protected
+
+    /tenant/instance/event:
+      access: tenant/user
 
 extent:
-  parents:
-    - [storage_pool, storage_pool]
   pkey: uuid
+  mount: {}
+  index: [volume]
 
 host:
-  parents: []
   pkey: uuid
+  mount:
+    /host:
+      access: protected
 
 image:
-  parents:
-    - [tenant, tenant]
   pkey: uuid
-  public: true
+  mount:
+    /tenant/image:
+      access: tenant/user
+
+    /image:
+      access: shared
+      filter:
+        tenant: null
 
 instance:
-  parents:
-    - [tenant, tenant]
   pkey: uuid
+  mount:
+    /tenant/instance:
+      access: tenant/user
 
 member:
-  parents:
-    - [tenant, tenant]
-    - [user, user]
   pkey: uuid
+  mount:
+    /tenant/member:
+      access: tenant/owner
+
+    /user/member:
+      access: user/ro
 
 network:
-  parents:
-    - [switch, switch]
   pkey: uuid
-  public: true
+  mount:
+    /tenant/switch/network:
+      access: tenant/user
+
+    /switch/network:
+      access: shared
 
 nic:
-  parents:
-    - [host, host]
-    - [bond, bond]
   pkey: hwaddr
+  mount:
+    /host/nic:
+      access: protected
+
+    /host/bond/nic:
+      access: protected
 
 nic_role:
-  parents:
-    - [bond, bond]
   pkey: uuid
+  mount:
+    /host/bond/role:
+      access: protected
 
 quota:
-  parents:
-    - [tenant, tenant]
   pkey: uuid
+  mount:
+    /tenant/quota:
+      access: protected
 
 route:
-  parents:
-    - [network, network]
   pkey: uuid
+  mount:
+    /tenant/switch/network/route:
+      access: tenant/user
+
+    /switch/network/route:
+      access: shared
 
 storage_pool:
-  parents: []
   pkey: uuid
-  public: true
+  mount:
+    /storage-pool:
+      access: shared
 
 switch:
-  parents:
-    - [tenant, tenant]
   pkey: uuid
+  mount:
+    /switch:
+      access: shared
+
+    /tenant/switch:
+      access: tenant/user
+
+switch:
+  pkey: uuid
+  access: shared
+  mount:
+    /tenant/switch:
+      access: tenant/user
+
+    /switch:
+      access: shared
+      filter:
+        tenant: null
 
 tenant:
-  parents: []
   pkey: uuid
+  mount:
+    /tenant:
+      access: tenant/user
 
 user:
-  parents: []
   pkey: email
+  mount:
+    /user:
+      access: user/rw
 
 vdisk:
-  parents:
-    - [instance, instance]
   pkey: uuid
+  mount:
+    /tenant/instance/vdisk:
+      access: tenant/user
+
+    /tenant/volume/vdisk:
+      access: tenant/user
 
 vnic:
-  parents:
-    - [instance, instance]
-    - [switch, switch]
   pkey: uuid
+  mount:
+    /tenant/instance/vnic:
+      access: tenant/user
+
+    /tenant/switch/vnic:
+      access: tenant/user
+
+    /switch/vnic:
+      access: protected
 
 volume:
-  parents:
-    - [storage_pool, storage_pool]
-    - [tenant, tenant]
   pkey: uuid
+  mount:
+    /storage-pool/volume:
+      access: protected
+
+    /tenant/volume:
+      access: tenant/user
+
+    /tenant/image/volume:
+      access: tenant/user
+
+    /image/volume:
+      access: protected
+
+host_disk:
+  pkey: [host, disk]
+  virtual: true
+  mount:
+    /host/disk:
+      access: protected
+
+host_instance:
+  pkey: [host, instance]
+  virtual: true
+  mount:
+    /host/instance:
+      access: protected
+
+host_cpu_profile:
+  pkey: [host, cpu_profile]
+  virtual: true
+  mount:
+    /host/cpu-profile:
+      access: protected
+
+host_volume:
+  pkey: [host, volume]
+  virtual: true
+  mount:
+    /host/volume:
+      access: protected
 

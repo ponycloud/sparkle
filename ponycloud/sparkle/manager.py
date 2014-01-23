@@ -91,7 +91,7 @@ class Manager(object):
             model = Model()
 
             for name, table in model.iteritems():
-                if not table.virtual:
+                if not table.schema.virtual:
                     for row in getattr(self.db, name).all():
                         part = {c.name: getattr(row, c.name) for c in row.c}
                         pkey = table.primary_key(part)
@@ -221,7 +221,7 @@ class Manager(object):
         """
 
         path, collection = path[:-1], path[-1]
-        rows = self.model[collection].list(**{k: keys[k] for k in path[-1:]})
+        rows = self.model[collection].list(**keys)
         return {row.pkey: row.to_dict() for row in rows}
 
 

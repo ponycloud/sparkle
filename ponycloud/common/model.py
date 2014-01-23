@@ -3,7 +3,7 @@
 __all__ = ['Model']
 
 
-from schema import schema
+from ponycloud.common.schema import schema
 
 
 class Model(dict):
@@ -21,11 +21,8 @@ class Model(dict):
         """Constructs the model."""
 
         # Prepare all model tables.
-        self.update({t.name: t(self) for t in TABLES})
-
-        # Let tables watch other tables for some relations to work.
-        for table in self.values():
-            table.add_watches(self)
+        for name, table in schema.tables.iteritems():
+            self[name] = Table(self, name, table)
 
 
     def dump(self, states=['desired', 'current']):
@@ -65,39 +62,17 @@ class Table(dict):
     be indexed for queries.
     """
 
-    # Name of the table within the model.
-    name = None
-
-    # True if not database backed.
-    virtual = False
-
-    # Name of the primary key column or a tuple if composite.
-    pkey = 'uuid'
-
-    # Columns to index rows by.
-    indexes = []
-
-    # Join tables for additional indexing.
-    # Every item is in the form `{'table': ('local', 'remote')}`,
-    # where `local` is the column refering to the local primary key and
-    # `remote` the column to index by.
-    nm_indexes = {}
-
-
-    # List of child tables. Contains only names.
-    children = []
-
-    def __init__(self, model):
+    def __init__(self, model, name, schema):
         """Prepare internal data structures of the table."""
 
-        # Back-reference to the model.
-        self.model = model
+        # Store necessary attributes.
+        self.model  = model
+        self.name   = name
+        self.schema = schema
 
         # Start with empty indexes.
         self.index = {i: {'desired': {}, 'current': {}} \
-                      for i in self.indexes}
-        self.nm_index = {r: {'desired': {}, 'current': {}} \
-                         for l, r in self.nm_indexes.values()}
+                      for i in self.schema.index}
 
         # Callbacks that subscribe to row events.
         self.before_row_update_callbacks = []
@@ -107,22 +82,11 @@ class Table(dict):
         self.delete_state_callbacks = []
         self.before_delete_state_callbacks = []
 
-    @classmethod
-    def primary_key(cls, row):
+    def primary_key(self, row):
         """Returns primary key for specified row dictionary."""
-        if isinstance(cls.pkey, tuple):
-            return tuple([row[k] for k in cls.pkey])
-        return row[cls.pkey]
-
-
-    def add_watches(self, model):
-        """Called to give table chance to watch other tables."""
-
-        # Receive notifications about changes in join tables
-        # and use them to build nm indexes.
-        for table in self.nm_indexes:
-            model[table].on_before_row_update(self.nm_unindex_row)
-            model[table].on_after_row_update(self.nm_index_row)
+        if isinstance(self.schema.pkey, basestring):
+            return row[self.schema.pkey]
+        return tuple([row[k] for k in self.schema.pkey])
 
 
     def on_before_row_update(self, callback, states=['desired', 'current']):
@@ -246,47 +210,18 @@ class Table(dict):
                 rec['callback'](self, row)
 
 
-    def nm_unindex_row(self, table, row):
-        """Unindexes join table row."""
-
-        local, remote = self.nm_indexes[table.name]
-
-        for state in ('desired', 'current'):
-            part = getattr(row, state)
-            if part is not None and remote in part and local in part:
-                if part[remote] in table.nm_index[remote][state]:
-                    self.nm_index[remote][state][part[remote]].remove(part[local])
-                    if 0 == len(self.nm_index[remote][state][part[remote]]):
-                        del self.nm_index[remote][state][part[remote]]
-
-
-    def nm_index_row(self, table, row):
-        """Indexes join table row."""
-
-        local, remote = self.nm_indexes[table.name]
-
-        for state in ('desired', 'current'):
-            part = getattr(row, state)
-            if part is not None and remote in part and local in part:
-                self.nm_index[remote][state].setdefault(part[remote], set())
-                self.nm_index[remote][state][part[remote]].add(part[local])
-
-
     def list(self, **keys):
-        """Return rows with indexed columns matching given keys."""
+        """
+        Return rows with indexed columns matching given keys.
+        Asking for non-indexed keys will result in a failure.
+        """
 
-        # None here means all rows, so that we don't have to maintain
-        # redundant index of all primary keys.
         selection = None
         for k, v in keys.iteritems():
-            if k not in self.index and k not in self.nm_index:
-                continue
-
             subselection = set()
-            for idx in self.index, self.nm_index:
-                for state in ('desired', 'current'):
-                    if k in idx and v in idx[k][state]:
-                        subselection.update(idx[k][state][v])
+            for state in ('desired', 'current'):
+                if v in self.index[k][state]:
+                    subselection.update(self.index[k][state][v])
 
             if selection is None:
                 selection = subselection
@@ -295,6 +230,7 @@ class Table(dict):
 
         if selection is None:
             return self.values()
+
         return [self[k] for k in selection]
 
 
@@ -341,16 +277,28 @@ class Row(object):
 
         tenants = set()
 
-        for path in schema.iter_paths():
-            if path[0] != 'tenant' or path[-1] != self.table.name:
+        for endpoint in self.table.schema.endpoints.itervalues():
+            # Discard all endpoints that are not tenant-specific.
+            if not endpoint.access.startswith('tenant/'):
                 continue
 
-            step = self
-            for i in reversed(xrange(len(path) - 1)):
-                fkey = step.desired[schema.get_fkey(path[i + 1], path[i])]
-                step = self.table.model[path[i]][fkey]
+            # Traverse rows up to the tenant.
+            row = self
+            mnt = endpoint
 
-            tenants.add(step.pkey)
+            while mnt.parent.table is not None:
+                if mnt.table.name == 'tenant':
+                    tenants.add(row.pkey)
+                    break
+
+                key = self.get_current(mnt.parent.table.name)
+                key = self.get_desired(mnt.parent.table.name, key)
+
+                if key is None:
+                    break
+
+                row = row.table.model[mnt.parent.table.name][key]
+                mnt = mnt.parent
 
         return tenants
 
@@ -372,7 +320,7 @@ class Row(object):
     def index(self, table):
         """Index the row into the table's indexes."""
         for state in ('desired', 'current'):
-            for idx in table.indexes:
+            for idx in table.schema.index:
                 part = getattr(self, state)
                 if part is not None and idx in part:
                     table.index[idx][state].setdefault(part[idx], set())
@@ -382,7 +330,7 @@ class Row(object):
     def unindex(self, table):
         """Remove the row from table's indexes."""
         for state in ('desired', 'current'):
-            for idx in table.indexes:
+            for idx in table.schema.index:
                 part = getattr(self, state)
                 if part is not None and idx in part:
                     if part[idx] in table.index[idx][state]:
@@ -400,193 +348,6 @@ class Row(object):
         current = ' +current' if self.current is not None else ''
         return '<Row %s%s%s>' % (self.pkey, desired, current)
 # /class Row
-
-
-class Address(Table):
-    name = 'address'
-    indexes = ['network', 'vnic']
-
-
-class Bond(Table):
-    name = 'bond'
-    indexes = ['host']
-    children = ['nic', 'nic_role']
-
-
-class Cluster(Table):
-    name = 'cluster'
-    indexes = ['tenant']
-    children = ['cluster_instance']
-
-
-class ClusterInstance(Table):
-    name = 'cluster_instance'
-    indexes = ['cluster', 'instance']
-
-
-class CPUProfile(Table):
-    name = 'cpu_profile'
-    nm_indexes = {'host_cpu_profile': ('cpu_profile', 'host')}
-
-
-class Config(Table):
-    name = 'config'
-    pkey = 'key'
-
-
-class Disk(Table):
-    name = 'disk'
-    pkey = 'id'
-    indexes = ['storage_pool']
-    nm_indexes = {'host_disk': ('disk', 'host')}
-
-
-class Extent(Table):
-    name = 'extent'
-    indexes = ['volume', 'storage_pool']
-
-
-class Event(Table):
-    name = 'event'
-    pkey = 'hash'
-    indexes = ['host', 'instance']
-
-class Host(Table):
-    name = 'host'
-    nm_indexes = {'host_disk':     ('host', 'disk'),
-                  'host_instance': ('host', 'instance')}
-    children = ['nic', 'bond', 'disk']
-
-class Image(Table):
-    name = 'image'
-    indexes = ['tenant']
-    nm_indexes = {'tenant_image': ('image', 'tenant')}
-
-
-class Instance(Table):
-    name = 'instance'
-    indexes = ['cpu_profile', 'tenant']
-    nm_indexes = {'host_instance': ('instance', 'host')}
-    children = ['vdisk', 'cluster_instance', 'vnic']
-
-
-class Member(Table):
-    name = 'member'
-    indexes = ['tenant', 'user']
-
-
-class Network(Table):
-    name = 'network'
-    indexes = ['switch']
-    children = ['route']
-
-
-class NIC(Table):
-    name = 'nic'
-    pkey = 'hwaddr'
-    indexes = ['host', 'bond']
-
-
-class NICRole(Table):
-    name = 'nic_role'
-    indexes = ['bond', 'address']
-
-
-class Quota(Table):
-    name = 'quota'
-    indexes = ['tenant']
-
-
-class Route(Table):
-    name = 'route'
-    indexes = ['network']
-
-
-class StoragePool(Table):
-    name = 'storage_pool'
-    children = ['disk']
-
-
-class Switch(Table):
-    name = 'switch'
-    indexes = ['tenant']
-    nm_indexes = {'tenant_switch': ('switch', 'tenant')}
-    children = ['network']
-
-
-class Tenant(Table):
-    name = 'tenant'
-    nm_indexes = {'tenant_switch': ('tenant', 'switch')}
-    children = ['instance', 'image', 'quota', 'volume', 'cluster', 'switch', 'member',  'volume']
-
-
-class TenantImage(Table):
-    name = 'tenant_image'
-    pkey = ('tenant', 'image')
-    indexes = ['tenant', 'image']
-
-
-class TenantSwitch(Table):
-    name = 'tenant_switch'
-    pkey = ('tenant', 'switch')
-    indexes = ['tenant', 'switch']
-
-
-class User(Table):
-    name = 'user'
-    pkey = 'email'
-    children = ['member']
-
-
-class VDisk(Table):
-    name = 'vdisk'
-    indexes = ['instance', 'volume']
-
-
-class VNIC(Table):
-    name = 'vnic'
-    indexes = ['instance', 'switch']
-    children = ['address', 'switch']
-
-
-class Volume(Table):
-    name = 'volume'
-    indexes = ['tenant', 'storage_pool']
-    nm_indexes = {'host_volume': ('volume', 'host')}
-    children = ['vdisk', 'extent']
-
-
-class HostDisk(Table):
-    virtual = True
-    name = 'host_disk'
-    pkey = ('host', 'disk')
-    indexes = ['host', 'disk']
-
-
-class HostInstance(Table):
-    virtual = True
-    name = 'host_instance'
-    pkey = ('host', 'instance')
-    indexes = ['host', 'instance']
-
-
-class HostCPUProfile(Table):
-    virtual = True
-    name = 'host_cpu_profile'
-    indexes = ['host', 'cpu_profile']
-
-
-class HostVolume(Table):
-    virtual = True
-    name = 'host_volume'
-    indexes = ['host', 'volume', 'type']
-
-
-TABLES = [Address, Bond, Cluster, ClusterInstance, CPUProfile, Disk, Event,
-          Extent, Host, Image, Instance, Member, Network,
-          NIC, NICRole, Quota, Route, StoragePool, Switch, Tenant,
-          TenantImage, TenantSwitch, User, VDisk, VNIC, Volume, HostDisk,
-          HostInstance, HostCPUProfile, HostVolume]
 
 
 # vim:set sw=4 ts=4 et:

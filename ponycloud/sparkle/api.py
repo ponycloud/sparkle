@@ -35,9 +35,35 @@ from ponycloud.sparkle.dbdict import validate_dbdict_fragment, make_schema, \
 import flask
 
 
-def path_to_endpoint(path):
-    """Convert list with path components to endpoint string for Flask."""
-    return '/v1/' + '/'.join(reduce(add, [[x, '<string:%s>' % x] for x in path]))
+def path_to_rule(path):
+    """Convert list with path components to routing rule for Flask."""
+
+    fullpath = ['']
+
+    endpoint = schema.root
+    covered  = set()
+    for elem in path:
+        endpoint = endpoint.children[elem]
+        fullpath.append(elem)
+
+        if isinstance(endpoint.table.pkey, basestring):
+            fullpath.append('<string:%s>' % endpoint.table.name)
+            covered.add(endpoint.table.name)
+        else:
+            keys = [key for key in endpoint.table.pkey if key not in covered]
+            assert len(keys) == 1, \
+                    "endpoint %r does not have it's keys covered" \
+                        % ('/' + '/'.join(path[:(1 + path.index(elem))]))
+
+            for key in keys:
+                assert key in schema.tables, \
+                        "primary key %s.%s is not named after another table" \
+                            % (endpoint.table.name, key)
+
+                fullpath.append('<string:%s>' % key)
+                covered.add(key)
+
+    return '/v1' + '/'.join(fullpath)
 
 def remove_nulls(data):
     """Recursively remove None values from dictionary."""
@@ -47,21 +73,14 @@ def remove_nulls(data):
 
     return {k: remove_nulls(v) for k, v in data.iteritems() if v is not None}
 
-def make_json_schema(cache, credentials, manager, write=True):
+def make_json_schema(cache, credentials, write=True):
         """Prepare schema for specified conditions."""
 
-        tenant = credentials.get('tenant')
-        user = credentials.get('user')
-
-        key = (tenant, user, write)
+        key = (tuple(sorted(credentials.iteritems())), write)
         if key in cache:
             return cache[key]
 
-        alicorn = False
-        if user is not None and user in manager.model['user']:
-            alicorn = manager.model['user'][user].get_desired('alicorn', False)
-
-        return cache.setdefault(key, make_schema(tenant, alicorn, write))
+        return cache.setdefault(key, make_schema(credentials, write))
 
 
 def make_sparkle_app(manager):
@@ -78,7 +97,7 @@ def make_sparkle_app(manager):
 
         try:
             uuids = preprocess_dbdict_patch(patch)
-            apply_patch(Children(manager.db), patch)
+            apply_patch(Children(manager.db, schema.root), patch)
             manager.db.commit()
             return uuids
         except Exception, e:
@@ -93,13 +112,13 @@ def make_sparkle_app(manager):
             validate_patch(patch)
 
             for op in patch:
-                writep = ('TEST' != op['op'])
-                jschema = make_json_schema(cache, credentials, manager, writep)
+                write = ('TEST' != op['op'])
+                jschema = make_json_schema(cache, credentials, write)
                 op['path'] = jpath + split(op['path'])
                 validate_dbdict_fragment(jschema, op.get('value', {}), op['path'])
 
                 if 'from' in op:
-                    jschema = make_json_schema(cache, credentials, manager, False)
+                    jschema = make_json_schema(cache, credentials, False)
                     op['from'] = jpath + split(op['from'])
                     validate_dbdict_fragment(jschema, {}, op['from'])
 
@@ -111,7 +130,7 @@ def make_sparkle_app(manager):
             cache = {}
 
             if 'GET' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, manager, False)
+                jschema = make_json_schema(cache, credentials, False)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = blockingCallFromThread(reactor, manager.list_collection, path, keys)
@@ -126,14 +145,14 @@ def make_sparkle_app(manager):
             cache = {}
 
             if 'GET' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, manager, False)
+                jschema = make_json_schema(cache, credentials, False)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = blockingCallFromThread(reactor, manager.get_entity, path, keys)
                 return remove_nulls(data)
 
             if 'DELETE' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, manager, True)
+                jschema = make_json_schema(cache, credentials, True)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 patch = [{'op': 'remove', 'path': jpath}]
@@ -148,8 +167,8 @@ def make_sparkle_app(manager):
         return collection_handler, entity_handler
 
     # Generate entity and collection endpoints.
-    for path in schema.iter_paths():
-        rule = path_to_endpoint(path)
+    for path, endpoint in schema.endpoints.iteritems():
+        rule = path_to_rule(path)
 
         collection_handler, entity_handler = make_handlers(path)
 
@@ -214,22 +233,15 @@ def make_sparkle_app(manager):
             if member is None:
                 raise Unauthorized('you are not a member of the tenant')
 
-        return make_token_result({'tenant': tenant})
+        return make_token_result({
+            'tenant': tenant,
+            'role': member.desired['role']
+        })
 
     # Endpoint to dump the schema for clients to orient themselves.
     @app.route_json('/v1/schema')
-    def endpoints():
-        def generate_path_schema():
-            for path in schema.iter_paths():
-                yield '/'.join(path), {
-                    'public': schema[path[-1]].get('public', False),
-                    'pkey': schema[path[-1]]['pkey'],
-                }
-
-        return {
-            'paths': dict(generate_path_schema()),
-        }
-
+    def dump_schema():
+        return schema.root.public
 
     # Debugging endpoint that dumps all data in the Sparkle model.
     if app.debug:

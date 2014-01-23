@@ -99,9 +99,9 @@ def authenticate(header, manager):
     """
     Validate Basic or Token authentication data and return payload.
 
-    The resulting payload will be either ``{'tenant': 'tenant-uuid'}``,
-    ``{'user': 'address'}``, or ``{}`` depending on the authentication
-    payload and password validity.
+    The resulting payload will be either ``{'tenant': 'tenant-uuid',
+    'role': 'role'}``, ``{'user': 'address', 'alicorn': boolean}``,
+    or ``{}`` depending on the authentication payload and password validity.
     """
 
     try:
@@ -109,12 +109,14 @@ def authenticate(header, manager):
 
         if kind == 'Basic':
             email, password = data.decode('base64').split(':')
+            user = manager.model['user'][email].desired
 
-            auth_data = manager.model['user'][email].desired['data']
-
-            if auth_data.get('method') is None:
-                if auth_data['password'] == password:
-                    return {'user': email}
+            if user['data'].get('method') is None:
+                if user['data']['password'] == password:
+                    if user['alicorn']:
+                        return {'user': email, 'alicorn': True}
+                    else:
+                        return {'user': email}
 
             else:
                 print 'unsupported authentication data %r' % auth_data
