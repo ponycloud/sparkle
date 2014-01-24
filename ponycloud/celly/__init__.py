@@ -9,6 +9,19 @@ from os.path import dirname
 from simplejson import loads, dumps
 import re
 
+class RequestError(Exception):
+    @classmethod
+    def from_status(cls, status, message=None):
+        exn = cls(message)
+        exn.code = status['status']
+        return exn
+
+class NotFoundError(RequestError):
+    pass
+
+class BadRequestError(RequestError):
+    pass
+
 
 class CollectionProxy(object):
     """Remote collection proxy."""
@@ -114,17 +127,19 @@ class Celly(object):
 
         if '404' == status['status']:
             if isinstance(data, dict):
-                raise KeyError(data.get('message', 'not found'))
-            raise KeyError('not found')
+               raise NotFoundError(data.get('message', 'not found')).from_status(status)
+            raise NotFoundError('not found').from_status(status)
 
         if '400' == status['status']:
             if isinstance(data, dict):
-                raise ValueError(data.get('message', 'bad request'))
-            raise ValueError('bad request')
+                raise BadRequestError(data.get('message', 'bad request')).from_status(status)
+            raise BadRequestError('bad request').from_status(status)
 
         if isinstance(data, dict):
-            raise Exception(data.get('message', 'request failed'))
-        raise Exception('request failed')
+            raise RequestError.from_status(status, data.get('message', 'request failed'))
+        raise RequestError.from_status(status,'request failed')
+
+
 
     @property
     def schema(self):
