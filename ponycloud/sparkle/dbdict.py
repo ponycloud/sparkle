@@ -419,8 +419,9 @@ class Collection(DbDict):
 
                     fragment[nk] = v
                     del fragment[k]
+                    k = nk
 
-            Entity.preprocess(fragment[nk], uuids, cschema, safe)
+            Entity.preprocess(fragment[k], uuids, cschema, safe)
 
 
 class Entity(DbDict):
