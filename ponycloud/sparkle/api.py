@@ -105,6 +105,8 @@ def make_sparkle_app(manager):
             raise
 
     def make_handlers(path):
+        endpoint = schema.resolve_path(path)
+
         def common_patch(credentials, keys, cache, jpath):
             """PATCH handler for both collection and entity endpoints."""
 
@@ -138,9 +140,8 @@ def make_sparkle_app(manager):
 
             if 'POST' == flask.request.method:
                 data = loads(flask.request.data)
-
                 if 'desired' in data:
-                    pkey = data['desired'].get(schema[jpath[-1]]['pkey'], 'POST')
+                    pkey = data['desired'].get(endpoint.table.pkey, 'POST')
                 else:
                     pkey = 'POST'
 

@@ -86,6 +86,21 @@ class Schema(object):
 
         del self.endpoints[()]
 
+    def resolve_path(self, path):
+        """
+        Resolve path to an endpoint.
+
+        :param path:  List or tuple of path components such as
+                      ``['tenant', 'instance', 'vnic']``.
+        :returns: An Endpoint instance.
+        """
+
+        endpoint = self.root
+        for elem in path:
+            endpoint = endpoint.children[elem]
+
+        return endpoint
+
 
 def load_schema():
     with open(os.path.dirname(__file__) + '/schema.yaml') as fp:

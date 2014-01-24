@@ -369,7 +369,7 @@ class Collection(DbDict):
         """Insert new entity to the collection."""
 
         desired = dict(value['desired'])
-        pkey = self.schema.pkey
+        pkey = self.schema.table.pkey
 
         if pkey in desired and desired[pkey] != key:
             raise KeyError('%s/%s/desired/%s (%s) does not match' \
@@ -387,7 +387,7 @@ class Collection(DbDict):
                                     % (self.schema.table.name,
                                        key, parent_pkey))
 
-        getattr(self.db, self.table).insert(**desired)
+        getattr(self.db, self.schema.table.name).insert(**desired)
         self.db.flush()
 
     def __delitem__(self, key):
@@ -420,7 +420,7 @@ class Collection(DbDict):
                     fragment[nk] = v
                     del fragment[k]
 
-            Entity.preprocess(fragment[k], uuids, cschema, safe)
+            Entity.preprocess(fragment[nk], uuids, cschema, safe)
 
 
 class Entity(DbDict):
