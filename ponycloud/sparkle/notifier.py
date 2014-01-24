@@ -29,28 +29,29 @@ class Notifier(WampServerFactory):
         """
         def make_model_handler(operation):
             def model_handler(table, row):
-
-                allowed = row.get_tenants()
-                to_publish = {
+                message = {
                     'operation': operation,
                     'type': table.name,
-                    'pkey-name': table.pkey,
+                    'pkey-name': table.schema.pkey,
                     'pkey': row.pkey,
                     'desired': row.desired,
                     'current': row.current
                 }
 
-                # If it's public, send to public...
-                if 'public' in schema[table.name]:
-                    self.publish('public', to_publish)
+                allowed = row.get_tenants()
+
+                # TODO: Send info about entities that would match
+                #       shared-access endpoints, such as public images.
+
+                if len(allowed) > 0:
+                    # Publish event to all interested tenants.
+                    for tenant in allowed:
+                        self.publish(tenant, message)
                 else:
-                    if allowed:
-                        # ..publish event to all interested tenants
-                        for tenant in allowed:
-                            self.publish(tenant, to_publish)
-                    else:
-                        # ...and report to alicorns
-                        self.publish('alicorns', to_publish)
+                    # Publish event only to alicorns.
+                    # NOTE: Due to the missing public entity notifications
+                    #       alicorns now get notifications about them as well.
+                    self.publish('alicorns', message)
 
             return model_handler
 

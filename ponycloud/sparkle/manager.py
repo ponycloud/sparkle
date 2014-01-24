@@ -12,7 +12,6 @@ from ponycloud.common.util import uuidgen
 from ponycloud.common.model import Model
 
 from ponycloud.sparkle.listener import ChangelogListener, ListenerError
-from ponycloud.sparkle.communicator import Communicator
 from ponycloud.sparkle.twilight import Twilight
 from ponycloud.sparkle.notifier import Notifier
 
@@ -34,12 +33,10 @@ class Manager(object):
         self.db = db
         self.router = router
 
-        # Authkeys from configuration are stored here
+        # Authkeys from configuration are stored here.
         self.authkeys = authkeys
 
-        """
-        Listener for applying changes in database
-        """
+        # Listener for applying changes in database.
         self.listener = ChangelogListener(db.engine.url)
         self.listener.add_callback(self.apply_changes)
         self.listener.listen()
@@ -50,19 +47,13 @@ class Manager(object):
         # This is how we notify users via websockets
         self.notifier = notifier
 
-        #
-        # In addition to the configuration, we keep some info about hosts.
-        # Specifically, their routing ids, sequence numbers, incarnation and
-        # most importantly, map of current states they provide plus a reverse
-        # map of desired state they are interested in.
-        #
-        self.incarnation = uuidgen()
+        # Map of hosts by their uuids so that we can maintain some
+        # state information about our communication with them.
         self.hosts = {}
-        self.host_to_row = {}
-        self.row_to_host = {}
 
-        # Install watches that manage row ownership for replication.
-        self.add_watches()
+        # Mapping of (name, pkey) pairs to hosts the rows were placed on.
+        # Very relevant to the placement algorithm.
+        self.placement = {}
 
 
     def start(self):
@@ -118,8 +109,6 @@ class Manager(object):
             old_model = self.model
             self.model = new_model
             self.model.load(old_model.dump(['current']))
-            self.incarnation = uuidgen()
-            self.add_watches()
 
             self.notifier.load(self.model)
             self.notifier.start()
@@ -127,20 +116,11 @@ class Manager(object):
         # Configure where to go from there.
         d.addCallbacks(success, failure)
 
-    def ensure_host(self, data, sender):
-        uuid = data.get('uuid')
-        incarnation = data.get('incarnation')
 
-        if uuid not in self.hosts:
-            print 'twilight %s appeared' % uuid
-            communicator = Communicator(self.incarnation, incarnation, sender, self.router)
-            self.hosts[uuid] = Twilight(uuid, self.model, communicator)
-        elif self.hosts[uuid].communicator is None:
-            communicator = Communicator(self.incarnation, incarnation, sender, self.router)
-            self.hosts[uuid].communicator = communicator
-
-    def process_event(self, data):
-        self.hosts[data['uuid']].process_changes(data)
+    def receive(self, message, sender):
+        if message['uuid'] not in self.hosts:
+            self.hosts[message['uuid']] = Twilight(self, message['uuid'])
+        self.hosts[message['uuid']].receive(message, sender)
 
 
     def apply_changes(self, data):
@@ -177,43 +157,6 @@ class Manager(object):
             return
         self.hosts[host].send_changes(changes)
 
-    def add_watches(self):
-        """Install event handlers that manage row ownership."""
-
-        def assign(table, row, hosts=None):
-            """ Add row for host or hosts
-                If hosts is none, this will assign given row to all known hosts """
-            def _set_state(table, row, host):
-                """ Add row to single specific host """
-                self.row_to_host.setdefault((table.name, row.pkey), set()).add(host)
-                self.hosts.setdefault(host, Twilight(host, self.model)).add_row(table.name, row.pkey)
-
-            if hosts is None:
-                for host in self.hosts:
-                    _set_state(table, row, host)
-            elif isinstance(hosts, list):
-                for host in hosts:
-                    _set_state(table, row, host)
-            else:
-                    _set_state(table, row, hosts)
-
-        def watch(table):
-            handler = table.get_watch_handler(self.model, assign)
-            @wraps(handler)
-            def wrapper(table, row):
-                host = self.row_to_host.pop((table.name, row.pkey), set([None])).pop()
-                if host:
-                    self.hosts[host].delete_row(table.name, row.pkey)
-                if row.desired is not None:
-                    handler(table, row)
-            table.on_after_row_update(wrapper)
-            for row in table.itervalues():
-                handler(table, row)
-
-        # Watch these tables for changes
-        watch_tables = ['host', 'bond', 'nic', 'nic_role', 'storage_pool', 'disk']
-        for table_name in watch_tables:
-            watch(self.model[table_name])
 
     def list_collection(self, path, keys):
         """

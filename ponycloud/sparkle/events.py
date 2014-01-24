@@ -12,21 +12,13 @@ def make_event_handler(manager):
         """
         Event handler bound to a manager instance.
         """
-
         # Ignore bogus events.
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or 'uuid' not in data:
             print 'bogus event', data
             return
 
-        if data.get('event') == 'resync':
-            return manager.twilight_resync(data['uuid'], sender)
-
-        if data.get('event') == 'update':
-            del data['event']
-            return manager.twilight_update(sender=sender, **data)
-
-        # Print unknown events.
-        print 'event', data
+        # Forward message to the manager.
+        manager.receive(data, sender)
 
     # Return the parameterized event handler.
     return event_handler
