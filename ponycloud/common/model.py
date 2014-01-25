@@ -48,6 +48,35 @@ class Model(dict):
         """Load previously dumped data."""
         for name, pkey, state, part in data:
             self[name].update_row(pkey, state, part)
+
+
+    def path_row(self, path, keys):
+        """
+        Return row on given path (from schema endpoint tree).
+        """
+
+        row = None
+        endpoint = schema.root
+
+        for elem in path:
+            endpoint = endpoint.children[elem]
+            name = endpoint.table.name
+            pkey = endpoint.table.pkey
+
+            if endpoint.parent.table is None:
+                filter = dict(endpoint.filter)
+                filter.update({pkey: keys[name]})
+            else:
+                pname = endpoint.parent.table.name
+                filter = dict(endpoint.filter)
+                filter.update({
+                    pkey: keys[name],
+                    pname: keys[pname],
+                })
+
+            row = self[name].one(**filter)
+
+        return row
 # /class Model
 
 

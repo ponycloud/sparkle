@@ -11,6 +11,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from ponycloud.common.util import uuidgen
 from ponycloud.common.model import Model
+from ponycloud.common.schema import schema
 
 from ponycloud.sparkle.listener import ChangelogListener, ListenerError
 from ponycloud.sparkle.twilight import Twilight
@@ -164,20 +165,28 @@ class Manager(object):
         Called from API to obtain list of collection items.
         """
 
-        path, collection = path[:-1], path[-1]
-        rows = self.model[collection].list(**keys)
+        # Verify that collection parent exists.
+        self.model.path_row(path[:-1], keys)
+
+        # Find endpoint for the collection itself.
+        endpoint = schema.resolve_path(path)
+
+        if endpoint.parent.table is None:
+            # Top-level collections do not have any parents.
+            rows = self.model[endpoint.table.name].list()
+        else:
+            # Filter using the endpoint filter and parent relationship.
+            pname = endpoint.parent.table.name
+            filter = dict(endpoint.filter)
+            filter.update({pname: keys[pname]})
+            rows = self.model[endpoint.table.name].list(**filter)
+
         return {row.pkey: row.to_dict() for row in rows}
 
 
     def get_entity(self, path, keys):
-        """
-        Called from API to obtain entity description.
-        """
-        try:
-            name = path[-1]
-            return self.model[name][keys[name]].to_dict()
-        except KeyError:
-            raise KeyError('%s/%s not found' % (name, keys[name]))
+        """Called from API to obtain entity description."""
+        return self.model.path_row(path, keys).to_dict()
 
 
 # vim:set sw=4 ts=4 et:
