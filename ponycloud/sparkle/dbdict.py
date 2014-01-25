@@ -391,6 +391,11 @@ class Collection(DbDict):
         getattr(self.db, self.schema.table.name).insert(**desired)
         self.db.flush()
 
+        # Recurse into children collections.
+        for name, children in value.get('children', {}).iteritems():
+            for k, v in children.iteritems():
+                self[key]['children'][name].add(k, v)
+
     def __delitem__(self, key):
         """Delete child entity by it's primary key."""
 
