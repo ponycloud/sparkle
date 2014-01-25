@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 __all__ = ['make_event_handler']
 
@@ -19,4 +20,3 @@ def make_event_handler(manager):
     return event_handler
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

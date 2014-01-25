@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 from autobahn.wamp import WampServerFactory, \
     WampCraServerProtocol
 
@@ -132,4 +133,3 @@ class NotificationsProtocol(WampCraServerProtocol):
         return permissions
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

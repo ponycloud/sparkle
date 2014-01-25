@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 import yaml
 import os.path
@@ -113,4 +114,3 @@ schema = load_schema()
 
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

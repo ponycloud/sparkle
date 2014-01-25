@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 import scrypt
 import os
@@ -132,4 +133,3 @@ def authenticate(header, manager):
 
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

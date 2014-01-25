@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 __doc__ = """
 Sparkle API
@@ -269,4 +270,3 @@ def make_sparkle_app(manager):
 
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

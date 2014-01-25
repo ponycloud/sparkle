@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 import select, psycopg2, psycopg2.extensions
 from twisted.internet import reactor, task
@@ -68,4 +69,3 @@ class ChangelogListener:
                     callback(data)
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

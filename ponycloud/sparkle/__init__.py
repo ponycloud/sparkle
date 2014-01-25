@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 from api import *
 from auth import *
@@ -12,4 +13,3 @@ from patch import *
 from rest import *
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-

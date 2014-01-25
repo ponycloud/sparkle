@@ -1,4 +1,5 @@
 #!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
 
 __all__ = ['Flaskful', 'json_response']
 
@@ -102,4 +103,3 @@ class Flaskful(Flask):
 
 
 # vim:set sw=4 ts=4 et:
-# -*- coding: utf-8 -*-
