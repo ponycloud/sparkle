@@ -194,13 +194,18 @@ def make_sparkle_app(manager):
         methods = ['GET', 'POST', 'PATCH']
         app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
 
-    # Custom top-level endpoint.
+    # Top-level endpoint for capabilitites reporting.
     @app.route_json('/')
     def index():
         return {
             'application': 'Sparkle',
             'capabilities': ['v1'],
         }
+
+    # Endpoint for the imaginary root entity.
+    @app.route_json('/v1/')
+    def root():
+        return {}
 
     def make_token_result(credentials):
         """Create response with specified credentials."""
