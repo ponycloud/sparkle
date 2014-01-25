@@ -18,6 +18,7 @@ from twisted.internet.threads import blockingCallFromThread
 from twisted.internet import reactor
 from werkzeug.exceptions import BadRequest, InternalServerError, NotFound, \
                                 Unauthorized
+from jsonschema import ValidationError
 from simplejson import loads, dumps
 from functools import wraps
 from os.path import dirname
@@ -27,7 +28,7 @@ from collections import Mapping
 
 from ponycloud.common.schema import schema
 
-from ponycloud.sparkle.rest import Flaskful
+from ponycloud.sparkle.rest import Flaskful, json_response
 from ponycloud.sparkle.auth import sign_token
 from ponycloud.sparkle.patch import validate_patch, apply_patch, split
 from ponycloud.sparkle.dbdict import validate_dbdict_fragment, make_schema, \
@@ -108,6 +109,20 @@ def make_sparkle_app(manager):
     def make_handlers(path):
         endpoint = schema.resolve_path(path)
 
+        def convert_errors(fn):
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                try:
+                    return fn(*args, **kwargs)
+                except KeyError, e:
+                    raise NotFound(e.message)
+                except (ValueError, TypeError), e:
+                    raise BadRequest(e.message)
+                except ValidationError, e:
+                    raise BadRequest('invalid document element (%s): %s' \
+                                        % ('/' + '/'.join(e.path), e.cause))
+            return wrapper
+
         def common_patch(credentials, keys, cache, jpath):
             """PATCH handler for both collection and entity endpoints."""
 
@@ -125,9 +140,10 @@ def make_sparkle_app(manager):
                     op['from'] = jpath + split(op['from'])
                     validate_dbdict_fragment(jschema, {}, op['from'])
 
-            return {'uuids': apply_valid_patch(patch)}
+            return json_response({'uuids': apply_valid_patch(patch)}, 202)
 
         @app.require_credentials(manager)
+        @convert_errors
         def collection_handler(credentials={}, **keys):
             jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-2]
             cache = {}
@@ -137,7 +153,7 @@ def make_sparkle_app(manager):
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = blockingCallFromThread(reactor, manager.list_collection, path, keys)
-                return remove_nulls(data)
+                return json_response(remove_nulls(data))
 
             if 'POST' == flask.request.method:
                 data = loads(flask.request.data)
@@ -148,14 +164,15 @@ def make_sparkle_app(manager):
 
                 post_path = jpath + [pkey]
                 jschema = make_json_schema(cache, credentials, True)
-                validate_dbdict_fragment(jschema, {}, post_path)
+                validate_dbdict_fragment(jschema, data, post_path)
                 patch = [{'op': 'add', 'path': post_path, 'value': data}]
-                return {'uuids': apply_valid_patch(patch)}
+                return json_response({'uuids': apply_valid_patch(patch)}, 202)
 
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, keys, cache, jpath)
 
         @app.require_credentials(manager)
+        @convert_errors
         def entity_handler(credentials={}, **keys):
             jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-1]
             cache = {}
@@ -165,14 +182,14 @@ def make_sparkle_app(manager):
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = blockingCallFromThread(reactor, manager.get_entity, path, keys)
-                return remove_nulls(data)
+                return json_response(remove_nulls(data))
 
             if 'DELETE' == flask.request.method:
                 jschema = make_json_schema(cache, credentials, True)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 patch = [{'op': 'remove', 'path': jpath}]
-                return {'uuids': apply_valid_patch(patch)}
+                return json_response({'uuids': apply_valid_patch(patch)}, 202)
 
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, keys, cache, jpath)
@@ -189,10 +206,10 @@ def make_sparkle_app(manager):
         collection_handler, entity_handler = make_handlers(path)
 
         methods = ['GET', 'DELETE', 'PATCH']
-        app.route_json(rule, methods=methods)(entity_handler)
+        app.route(rule, methods=methods)(entity_handler)
 
         methods = ['GET', 'POST', 'PATCH']
-        app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
+        app.route(dirname(rule) + '/', methods=methods)(collection_handler)
 
     # Top-level endpoint for capabilitites reporting.
     @app.route_json('/')

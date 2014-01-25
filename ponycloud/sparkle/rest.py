@@ -63,6 +63,15 @@ class Flaskful(Flask):
                                 else 'requested url was not found',
             }, 404, getattr(e, 'headers', {}))
 
+        @self.errorhandler(405)
+        def method_not_allowed(e):
+            return json_response({
+                'error': 'method-not-allowed',
+                'message': e.description \
+                            if not e.description.startswith('<p>') \
+                            else 'method not allowed',
+            }, 405, getattr(e, 'headers', {}))
+
         @self.errorhandler(500)
         def internal_server_error(e):
             return json_response({
