@@ -38,13 +38,13 @@ class Manager(object):
         # Authkeys from configuration are stored here.
         self.authkeys = authkeys
 
-        # Listener for applying changes in database.
-        self.listener = ChangelogListener(db.engine.url)
-        self.listener.add_callback(self.apply_changes)
-        self.listener.listen()
-
         # This is where we keep the configuration data.
         self.model = Model()
+
+        # Listener for applying changes in database.
+        self.listener = ChangelogListener(db.engine.url)
+        self.listener.add_callback(self.model.load)
+        self.listener.listen()
 
         # This is how we notify users via websockets
         self.notifier = notifier
@@ -123,33 +123,6 @@ class Manager(object):
         if message['uuid'] not in self.hosts:
             self.hosts[message['uuid']] = Twilight(self, message['uuid'])
         self.hosts[message['uuid']].receive(message, sender)
-
-
-    def apply_changes(self, data):
-        """
-        Applies changes to the model and forwards them to Twilights.
-
-        Sparkle is not supposed to send current state,
-        so make sure you only update desired state through here.
-        """
-
-        # Apply non-delete changes to the model,
-        # so that we know how new rows map to individual hosts.
-        self.model.load([ch for ch in data if ch[3]])
-
-        # Sort out which changes should go to which hosts.
-        hosts = {}
-        for change in data:
-            for h in self.row_to_host.get(change[:2], []):
-                hosts.setdefault(h, []).append(change)
-
-        # Apply deletion changes to the model after assesing what hosts
-        # to send notifications to.  The host-row mappings are removed here.
-        self.model.load([ch for ch in data if not ch[3]])
-
-        # Send the change bulks.
-        for host, ch in hosts.iteritems():
-            self.send_changes(host, ch)
 
 
     def send_changes(self, host, changes):
