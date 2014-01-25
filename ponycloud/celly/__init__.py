@@ -19,27 +19,27 @@ class RequestError(Exception):
         if not isinstance(data, dict):
             data = {}
 
+        if code == 400:
+            return BadRequestError(data.get('message', 'bad request'))
+
         if code == 404:
             return NotFoundError(data.get('message', 'not found'))
 
         if code == 405:
             return MethodNotAllowedError(data.get('message', 'method not allowed'))
 
-        if code == 500:
-            return BadRequestError(data.get('message', 'bad request'))
-
         exn = cls(data.get('message', 'request failed'))
         exn.code = code
         return exn
+
+class BadRequestError(RequestError):
+    code = 400
 
 class NotFoundError(RequestError):
     code = 404
 
 class MethodNotAllowedError(RequestError):
     code = 405
-
-class BadRequestError(RequestError):
-    code = 500
 
 
 class CollectionProxy(object):
@@ -141,7 +141,7 @@ class Celly(object):
         if status.get('content-type') == 'application/json':
             data = loads(data)
 
-        if 200 == int(status['status']):
+        if int(status['status']) in (200, 202):
             return data
 
         raise RequestError.from_response(status, data)
