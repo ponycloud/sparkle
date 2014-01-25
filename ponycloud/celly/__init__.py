@@ -1,7 +1,8 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-__all__ = ['Celly']
+__all__ = ['Celly', 'RequestError', 'NotFoundError', 'MethodNotAllowedError',
+           'BadRequestError']
 
 from httplib2 import Http
 from urllib import quote
@@ -12,16 +13,33 @@ import re
 
 class RequestError(Exception):
     @classmethod
-    def from_status(cls, status, message=None):
-        exn = cls(message)
-        exn.code = status['status']
+    def from_response(cls, status, data):
+        code = int(status['status'])
+
+        if not isinstance(data, dict):
+            data = {}
+
+        if code == 404:
+            return NotFoundError(data.get('message', 'not found'))
+
+        if code == 405:
+            return MethodNotAllowedError(data.get('message', 'method not allowed'))
+
+        if code == 500:
+            return BadRequestError(data.get('message', 'bad request'))
+
+        exn = cls(data.get('message', 'request failed'))
+        exn.code = code
         return exn
 
 class NotFoundError(RequestError):
-    pass
+    code = 404
+
+class MethodNotAllowedError(RequestError):
+    code = 405
 
 class BadRequestError(RequestError):
-    pass
+    code = 500
 
 
 class CollectionProxy(object):
@@ -123,23 +141,10 @@ class Celly(object):
         if status.get('content-type') == 'application/json':
             data = loads(data)
 
-        if '200' == status['status']:
+        if 200 == int(status['status']):
             return data
 
-        if '404' == status['status']:
-            if isinstance(data, dict):
-               raise NotFoundError(data.get('message', 'not found')).from_status(status)
-            raise NotFoundError('not found').from_status(status)
-
-        if '400' == status['status']:
-            if isinstance(data, dict):
-                raise BadRequestError(data.get('message', 'bad request')).from_status(status)
-            raise BadRequestError('bad request').from_status(status)
-
-        if isinstance(data, dict):
-            raise RequestError.from_status(status, data.get('message', 'request failed'))
-        raise RequestError.from_status(status,'request failed')
-
+        raise RequestError.from_response(status, data)
 
 
     @property
