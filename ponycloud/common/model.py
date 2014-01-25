@@ -235,16 +235,22 @@ class Table(dict):
         return [self[k] for k in selection]
 
 
-    def one(self, default=None, **keys):
+    def one(self, **keys):
         """
         Same as list(), but returns just one item.
 
         If the item is not found, or there are multiple such items,
-        returns None or other configured default value.
+        raises KeyError.
         """
+
         items = self.list(**keys)
-        if len(items) != 1:
-            return default
+
+        if len(items) == 0:
+            raise KeyError('no matching rows found')
+
+        if len(items) > 1:
+            raise KeyError('too many matching rows found')
+
         return items[0]
 
     def get_watch_handler(self, model, assign_callback):
