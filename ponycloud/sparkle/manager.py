@@ -43,7 +43,7 @@ class Manager(object):
 
         # Listener for applying changes in database.
         self.listener = ChangelogListener(db.engine.url)
-        self.listener.add_callback(self.model.load)
+        self.listener.add_callback(self.apply_changes)
         self.listener.listen()
 
         # This is how we notify users via websockets
@@ -117,6 +117,11 @@ class Manager(object):
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)
+
+
+    def apply_changes(self, changes):
+        """Incorporate changes from database into the model."""
+        self.model.load(changes)
 
 
     def receive(self, message, sender):
