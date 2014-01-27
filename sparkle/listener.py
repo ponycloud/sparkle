@@ -48,8 +48,8 @@ class ChangelogListener:
 
     def _start(self):
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        curs = self.conn.cursor()
-        curs.execute("LISTEN changelog;")
+        with self.conn.cursor() as curs:
+            curs.execute("LISTEN changelog;")
 
     def poll(self):
             data = []
