@@ -6,7 +6,7 @@ __all__ = ['Twilight']
 from twisted.internet import task
 from uuid import uuid4
 
-from ponycloud.common.schema import schema
+from sparkle.schema import schema
 
 
 class Twilight(object):

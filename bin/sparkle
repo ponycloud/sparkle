@@ -6,7 +6,7 @@ from twisted.web.server import Site
 from twisted.web.wsgi import WSGIResource
 
 # 0MQ takes care of all messaging.
-from ponycloud.common.tzmq import Router
+from sparkle.tzmq import Router
 
 # Data are stored in a PostgreSQL database.
 import sqlsoup
@@ -19,7 +19,7 @@ from sys import argv
 from ConfigParser import ConfigParser
 
 # The application itself also comes in handy... ;-)
-from ponycloud.sparkle import *
+from sparkle import *
 
 if __name__ == '__main__':
     def do_start(config):

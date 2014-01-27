@@ -6,14 +6,13 @@ from __future__ import unicode_literals
 import re
 import jsonschema
 
-from sqlalchemy.exc import DataError
 from sqlalchemy.orm.exc import UnmappedInstanceError
 from pprint import pformat
-from uuid import UUID, uuid4
+from uuid import uuid4
 from collections import Mapping, MutableMapping, Sequence, MutableSequence
 
-from ponycloud.common.schema import schema
-from ponycloud.sparkle.patch import Pointer
+from sparkle.schema import schema
+from sparkle.patch import Pointer
 
 __doc__ = """
 Database to Dictionary

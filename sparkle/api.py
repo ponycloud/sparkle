@@ -26,13 +26,12 @@ from operator import add
 from time import time
 from collections import Mapping
 
-from ponycloud.common.schema import schema
-
-from ponycloud.sparkle.rest import Flaskful, json_response
-from ponycloud.sparkle.auth import sign_token
-from ponycloud.sparkle.patch import validate_patch, apply_patch, split
-from ponycloud.sparkle.dbdict import validate_dbdict_fragment, make_schema, \
-                                     preprocess_dbdict_patch, Children
+from sparkle.schema import schema
+from sparkle.rest import Flaskful, json_response
+from sparkle.auth import sign_token
+from sparkle.patch import validate_patch, apply_patch, split
+from sparkle.dbdict import validate_dbdict_fragment, make_schema, \
+                           preprocess_dbdict_patch, Children
 
 import flask
 

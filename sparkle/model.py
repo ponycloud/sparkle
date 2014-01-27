@@ -4,7 +4,7 @@
 __all__ = ['Model']
 
 
-from ponycloud.common.schema import schema
+from sparkle.schema import schema
 
 
 class Model(dict):

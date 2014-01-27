@@ -1,14 +1,14 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
-from autobahn.wamp import WampServerFactory, \
-    WampCraServerProtocol
-
-from twisted.internet import reactor
-from auth import extract_token
-from simplejson import loads
-from ponycloud.common import schema
 
 __all__ = ['Notifier']
+
+from simplejson import loads
+from twisted.internet import reactor
+from autobahn.wamp import WampServerFactory, WampCraServerProtocol
+
+from sparkle.schema import schema
+from sparkle.auth import extract_token
 
 
 class Notifier(WampServerFactory):

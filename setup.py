@@ -11,16 +11,13 @@ setup(
     license = 'MIT',
     keywords = 'cloud management',
     url = 'http://github.com/ponycloud/python-ponycloud',
-    packages=['ponycloud',
-              'ponycloud.sparkle',
-              'ponycloud.celly',
-              'ponycloud.common'],
+    packages=['sparkle'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Topic :: System :: Distributed Computing',
         'License :: OSI Approved :: MIT License',
     ],
-    scripts=['sparkle']
+    scripts=['bin/sparkle']
 )
 
 

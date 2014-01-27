@@ -11,7 +11,7 @@ from zope.interface import implements
 from simplejson import loads, dumps
 from time import time
 
-from ponycloud.common.util import uuidgen
+from sparkle.util import uuidgen
 
 class Router(object):
     """

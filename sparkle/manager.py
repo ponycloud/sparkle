@@ -4,23 +4,13 @@
 __all__ = ['Manager']
 
 from twisted.internet import task, reactor
-from twisted.internet.threads import deferToThread, blockingCallFromThread
+from twisted.internet.threads import deferToThread
+from sqlalchemy.exc import OperationalError
 
-from sqlalchemy.exc import OperationalError, DatabaseError
-from sqlalchemy.orm.exc import NoResultFound
-
-from ponycloud.common.util import uuidgen
-from ponycloud.common.model import Model
-from ponycloud.common.schema import schema
-
-from ponycloud.sparkle.listener import ChangelogListener, ListenerError
-from ponycloud.sparkle.twilight import Twilight
-from ponycloud.sparkle.notifier import Notifier
-
-from functools import wraps
-
-import traceback
-import re
+from sparkle.model import Model
+from sparkle.schema import schema
+from sparkle.listener import ChangelogListener, ListenerError
+from sparkle.twilight import Twilight
 
 
 class Manager(object):
