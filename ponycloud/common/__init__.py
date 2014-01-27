@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from decorators import *
-from events import *
 from model import *
 from schema import *
 from tzmq import *
