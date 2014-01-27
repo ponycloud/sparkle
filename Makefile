@@ -1,8 +1,8 @@
 #!/usr/bin/make -f
 
 # Generic documentation files.
-mds   := $(shell find * -name '*.md')
-dias  := $(shell find * -name '*.dia')
+mds   := $(shell find doc -name '*.md')
+dias  := $(shell find doc -name '*.dia')
 htmls := $(mds:.md=.html)
 pngs  := $(dias:.dia=.png)
 
