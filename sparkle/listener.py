@@ -20,52 +20,133 @@ class ChangelogListener:
         """
         Create connection to db using connection string
         """
-        self.conn = psycopg2.connect(str(conn_string))
-        self.listener = False
-        self.callbacks = []
 
-    def listen(self, interval=0.2):
-        """
-        Start listening and passing the results
-        to callback after a certain interval passes
-        """
-        self._start()
-        self.listener = task.LoopingCall(self.poll)
-        self.listener.start(interval)
+        # Connect to the database.
+        self.conn = psycopg2.connect(str(conn_string))
+
+        # Start with empty set of change listeners.
+        self.callbacks = set()
+
+        # Start with empty mapping of txid to waiting transactions.
+        self.transactions = {}
+
+        # Transaction identificator of the last processed change.
+        self.txid = None
+
+        # Accumulated changes from the same transaction.
+        self.changes = []
+
+        # Looping calls that take care of getting changes from the database.
+        self.poller = None
+        self.corker = None
 
     def add_callback(self, callback):
-        """
-        Register another callback which should be fired
-        on any event from db
-        """
-        if hasattr(callback, '__call__'):
-            self.callbacks.append(callback)
+        """Register callback to notify of every transaction's changes."""
+        self.callbacks.add(callback)
 
-    def stop(self):
-        if self.listener:
-            self.listener.stop()
-            self.callback = lambda *args: None
+    def remove_callback(self, callback):
+        """De-register previously added callback."""
+        self.callbacks.discard(callback)
 
-    def _start(self):
+    def block_until_transaction(self, txid):
+        """
+        Produce deferred that will wait until the transaction completes.
+        """
+
+        if txid not in self.transactions:
+            self.transactions[txid] = Deferred()
+
+        return self.transactions[txid]
+
+    def start(self):
+        """
+        Start forwarding changes to registered handlers.
+        """
+
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         with self.conn.cursor() as curs:
             curs.execute("LISTEN changelog;")
 
+        self.poller = task.LoopingCall(self.poll)
+        self.poller.start(0.2)
+
+        self.corker = task.LoopingCall(self.cork)
+        self.corker.start(5.0)
+
+    def stop(self):
+        """
+        Stop listening to transaction changes.
+        """
+
+        if self.poller is not None:
+            self.poller.stop()
+            self.poller = None
+
+        if self.corker is not None:
+            self.corker.stop()
+            self.corker = None
+
+    def cork(self):
+        """
+        Insert read barrier to the queue of pending changes.
+        Return transaction identificator.
+        """
+
+        with self.conn.cursor() as curs:
+            curs.execute('SELECT cork() AS cork;')
+            return int(curs.fetchone()[0])
+
     def poll(self):
-            data = []
-            self.conn.poll()
+        """
+        Receive fresh changes from the database.
+        """
 
-            while self.conn.notifies:
-                item = loads(self.conn.notifies.pop().payload)
-                entity, action, pkey = item[:3]
-                payload = loads(item[-1])
-                if action == 'DELETE':
-                    data.append((entity, payload[pkey], 'desired', None))
-                else:
-                    data.append((entity, payload[pkey], 'desired', payload))
+        self.conn.poll()
 
-            if data:
+        while len(self.conn.notifies) > 0:
+            item = loads(self.conn.notifies.pop().payload)
+
+            op   = item[0]
+            txid = int(item[1])
+
+            def flush():
+                print 'flushing', self.changes
+
+                # Notify listeners about new completed transaction.
                 for callback in self.callbacks:
-                    callback(data)
+                    callback(self.changes)
+
+                # Reset accumulated changes and transaction id.
+                self.changes = []
+                self.txid = txid
+
+                # Unblock any waiting threads.
+                if txid in self.transactions:
+                    self.transactions.pop(txid).callback(txid)
+
+            if self.txid is None:
+                # First transaction should not trigger a flush.
+                self.txid = txid
+
+            if self.txid != txid:
+                # Flush on txid change.
+                flush()
+
+            if op == 'u':
+                # Accumulate changes.
+                entity, action, pkey = item[2:5]
+                payload = loads(item[-1])
+
+                if action == 'DELETE':
+                    change = (entity, payload[pkey], 'desired', None)
+                else:
+                    change = (entity, payload[pkey], 'desired', payload)
+
+                self.changes.append(change)
+
+            elif op == 'c':
+                # Flush on every cork operation.
+                flush()
+
 
 # vim:set sw=4 ts=4 et:

@@ -34,7 +34,7 @@ class Manager(object):
         # Listener for applying changes in database.
         self.listener = ChangelogListener(db.engine.url)
         self.listener.add_callback(self.apply_changes)
-        self.listener.listen()
+        self.listener.start()
 
         # This is how we notify users via websockets
         self.notifier = notifier
