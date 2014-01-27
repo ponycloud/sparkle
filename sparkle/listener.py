@@ -110,8 +110,6 @@ class ChangelogListener:
             txid = int(item[1])
 
             def flush():
-                print 'flushing', self.changes
-
                 # Notify listeners about new completed transaction.
                 for callback in self.callbacks:
                     callback(self.changes)
