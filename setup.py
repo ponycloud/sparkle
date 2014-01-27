@@ -17,7 +17,7 @@ setup(
         'Topic :: System :: Distributed Computing',
         'License :: OSI Approved :: MIT License',
     ],
-    scripts=['bin/sparkle']
+    scripts=['sparkle-daemon']
 )
 
 
