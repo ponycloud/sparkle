@@ -537,7 +537,7 @@ class Desired(DbDict):
             raise KeyError('%s/%s/desired/%s not found' \
                                 % (self.schema.table.name, self.pkey, key))
 
-        if key == self.schema.parent.table.name:
+        if self.schema.parent.table and key == self.schema.parent.table.name:
             raise KeyError('%s/%s/desired/%s is immutable' \
                                 % (self.schema.table.name, self.pkey, key))
 
@@ -551,7 +551,7 @@ class Desired(DbDict):
             raise KeyError('%s/%s/desired/%s already exists' \
                                 % (self.schema.table.name, self.pkey, key))
 
-        if key == self.schema.parent.table.name:
+        if self.schema.parent.table and key == self.schema.parent.table.name:
             raise KeyError('%s/%s/desired/%s is immutable' \
                                 % (self.schema.table.name, self.pkey, key))
 
@@ -570,7 +570,7 @@ class Desired(DbDict):
             raise KeyError('%s/%s/desired/%s not found' \
                                 % (self.schema.table.name, self.pkey, key))
 
-        if key == self.schema.parent.table.name:
+        if self.schema.parent.table and key == self.schema.parent.table.name:
             raise KeyError('%s/%s/desired/%s is immutable' \
                                 % (self.schema.table.name, self.pkey, key))
 
