@@ -25,6 +25,10 @@ class Model(dict):
         for name, table in schema.tables.iteritems():
             self[name] = Table(self, name, table)
 
+        # Queue with callbacks triggered by row updates.
+        # Flush using self.commit().
+        self.callbacks = []
+
 
     def dump(self, states=['desired', 'current']):
         """
@@ -33,6 +37,7 @@ class Model(dict):
         The output format (compatible with Model.load) is
         `[(table, state, pkey, part), ...]`.
         """
+
         out = []
 
         for name, table in self.iteritems():
@@ -45,9 +50,25 @@ class Model(dict):
 
 
     def load(self, data):
-        """Load previously dumped data."""
+        """
+        Load previously dumped data in one transaction.
+        """
+
         for name, pkey, state, part in data:
             self[name].update_row(pkey, state, part)
+
+        self.commit()
+
+
+    def commit(self):
+        """
+        Run all pending callbacks.
+        """
+
+        for callback in self.callbacks:
+            callback()
+
+        self.callbacks = []
 
 
     def path_row(self, path, keys):
@@ -204,7 +225,7 @@ class Table(dict):
         # Fire callbacks to inform subscribers that the row will change.
         for rec in self.before_row_update_callbacks:
             if state in rec['states']:
-                rec['callback'](self, row)
+                self.model.callbacks.append(lambda: rec['callback'](self, row))
 
         # {create, update, delete} callbacks interested in this event.
         state_callbacks = []
@@ -214,7 +235,7 @@ class Table(dict):
                 # Fire callbacks just before delete
                 for rec in self.before_delete_state_callbacks:
                     if state in rec['states']:
-                        rec['callback'](self, row)
+                        self.model.callbacks.append(lambda: rec['callback'](self, row))
 
                 state_callbacks = self.delete_state_callbacks
             setattr(row, state, None)
@@ -237,7 +258,7 @@ class Table(dict):
         # Fire both after-row and state callbacks.
         for rec in self.after_row_update_callbacks + state_callbacks:
             if state in rec['states']:
-                rec['callback'](self, row)
+                self.model.callbacks.append(lambda: rec['callback'](self, row))
 
 
     def list(self, **keys):
