@@ -125,8 +125,7 @@ def authenticate(header, manager):
             return {}
 
         if kind == 'Token':
-                apikey = manager.authkeys['apikey']
-                return loads(extract_token(data, apikey))
+                return loads(extract_token(data, manager.apikey))
 
     except (TypeError, KeyError, ValueError):
         return {}

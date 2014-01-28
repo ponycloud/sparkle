@@ -58,6 +58,16 @@ class Table(object):
             for key in self.pkey:
                 self.index.add(key)
 
+    def primary_key(self, row):
+        """
+        Returns primary key for specified row dictionary.
+        """
+
+        if isinstance(self.pkey, basestring):
+            return row[self.pkey]
+
+        return tuple([row[k] for k in self.pkey])
+
 
 class Schema(object):
     def __init__(self, data):

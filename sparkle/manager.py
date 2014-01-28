@@ -18,26 +18,27 @@ class Manager(object):
     The main application logic of Sparkle.
     """
 
-    def __init__(self, router, db, notifier, authkeys):
+    def __init__(self, router, db, notifier, apikey):
         """
         Stores the event sinks for later use.
         """
         self.db = db
         self.router = router
 
-        # Authkeys from configuration are stored here.
-        self.authkeys = authkeys
+        # API secret key.
+        self.apikey = apikey
 
-        # This is where we keep the configuration data.
+        # This is where we keep the configuration and status data.
         self.model = Model()
 
-        # Listener for applying changes in database.
-        self.listener = DatabaseListener(db.engine.url)
+        # Create listener for applying changes in database.
+        self.listener = DatabaseListener(self.db.engine.url)
         self.listener.add_callback(self.apply_changes)
-        self.listener.start()
 
         # This is how we notify users via websockets
         self.notifier = notifier
+        self.notifier.set_model(self.model)
+        self.notifier.start()
 
         # Map of hosts by their uuids so that we can maintain some
         # state information about our communication with them.
@@ -70,18 +71,25 @@ class Manager(object):
         print 'scheduling data load'
 
         def load():
-            # Create the replacement model.
-            model = Model()
+            # Drop any cached changes.
+            self.db.rollback()
 
-            for name, table in model.iteritems():
-                if not table.schema.virtual:
+            # Attempt to connect database change listener so that we
+            # don't miss out on any notifications.
+            self.listener.connect()
+
+            # Stash for the extracted data.
+            data = []
+
+            for name, table in schema.tables.iteritems():
+                if not table.virtual:
                     for row in getattr(self.db, name).all():
                         part = {c.name: getattr(row, c.name) for c in row.c}
                         pkey = table.primary_key(part)
-                        table.update_row(pkey, 'desired', part)
+                        data.append((name, pkey, 'desired', part))
 
-            # Return finished model to replace the current one.
-            return model
+            # Return complete data set to be loaded into the model.
+            return data
 
         # Attempt the load the data.
         d = deferToThread(load)
@@ -90,20 +98,16 @@ class Manager(object):
         # database, other exceptions need to be propagated so that we
         # don't break debugging.
         def failure(fail):
-            fail.trap(OperationalError)
-            print 'data load failed, retrying in 15 seconds'
+            print 'database connection failed, retrying in 15 seconds'
             reactor.callLater(15, self.schedule_load)
 
         # In case of success
-        def success(new_model):
+        def success(data):
             print 'data successfully loaded'
+            self.model.load(data)
 
-            old_model = self.model
-            self.model = new_model
-            self.model.load(old_model.dump(['current']))
-
-            self.notifier.load(self.model)
-            self.notifier.start()
+            # Start processing database changes.
+            self.listener.start()
 
         # Configure where to go from there.
         d.addCallbacks(success, failure)

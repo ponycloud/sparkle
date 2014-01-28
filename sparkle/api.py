@@ -259,7 +259,7 @@ def make_sparkle_app(manager):
         """Create response with specified credentials."""
 
         payload = dumps(credentials)
-        apikey = manager.authkeys['apikey']
+        apikey = manager.apikey
         validity = 3600
 
         return {

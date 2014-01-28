@@ -133,12 +133,6 @@ class Table(dict):
         self.delete_state_callbacks = []
         self.before_delete_state_callbacks = []
 
-    def primary_key(self, row):
-        """Returns primary key for specified row dictionary."""
-        if isinstance(self.schema.pkey, basestring):
-            return row[self.schema.pkey]
-        return tuple([row[k] for k in self.schema.pkey])
-
 
     def on_before_row_update(self, callback, states=['desired', 'current']):
         """Register function to call before modifying a row."""

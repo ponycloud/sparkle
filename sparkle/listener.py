@@ -117,9 +117,6 @@ class DatabaseListener(object):
         Start forwarding changes to registered handlers.
         """
 
-        # Connect to the database.
-        self.connect()
-
         # Start receiving descriptor events.
         reactor.addReader(self)
 

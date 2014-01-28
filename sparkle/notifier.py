@@ -12,22 +12,24 @@ from sparkle.auth import extract_token
 
 
 class Notifier(WampServerFactory):
-    # Used for model lazy loading
-    def load(self, model):
+    def set_model(self, model):
+        """
+        Hook notifier to specified model.
+        """
+
         self.model = model
         self.protocol = NotificationsProtocol
         self.topic_uri = '[ponycloud:notifications]'
 
-    # Call this method to send something to certain tenant
-    def publish(self, tenant_uuid, event):
-        self.dispatch('{}/{}'.format(self.topic_uri, tenant_uuid), event)
+    def publish(self, channel, event):
+        """Publish notification on a specified channel."""
+        self.dispatch(self.topic_uri + '/' + channel, event)
 
     def start(self):
         """
-        Main method called on start of the notifier. This method creates hooks in model used
-        for the distribution of notifications.
-
+        Create hooks in model used for the distribution of notifications.
         """
+
         def make_model_handler(operation):
             def model_handler(table, row):
                 message = {

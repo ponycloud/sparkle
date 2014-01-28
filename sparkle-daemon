@@ -30,12 +30,12 @@ if __name__ == '__main__':
         # Prepare the database connection.
         db = sqlsoup.SQLSoup(config.get('db', 'url'))
 
-        # Prepare the WS notifier
+        # Prepare the WS notifier.
         notifier = Notifier(config.get('ws', 'url'), debugWamp=True)
         notifier.apikey = config.get('auth', 'apikey')
 
         # Prepare the manager that takes care of business logic.
-        manager = Manager(router, db, notifier, dict(config.items('auth')))
+        manager = Manager(router, db, notifier, config.get('auth', 'apikey'))
 
         # Dispatch events to manager.
         router.on_message = make_event_handler(manager)
