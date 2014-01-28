@@ -9,7 +9,7 @@ from sqlalchemy.exc import OperationalError
 
 from sparkle.model import Model
 from sparkle.schema import schema
-from sparkle.listener import ChangelogListener, ListenerError
+from sparkle.listener import DatabaseListener
 from sparkle.twilight import Twilight
 
 
@@ -32,7 +32,7 @@ class Manager(object):
         self.model = Model()
 
         # Listener for applying changes in database.
-        self.listener = ChangelogListener(db.engine.url)
+        self.listener = DatabaseListener(db.engine.url)
         self.listener.add_callback(self.apply_changes)
         self.listener.start()
 

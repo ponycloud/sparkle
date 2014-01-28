@@ -1,28 +1,39 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-import select, psycopg2, psycopg2.extensions
-from twisted.internet import reactor, task
+__all__ = ['DatabaseListener']
+
+from select import select
 from simplejson import loads
 
-__all__ = ['ChangelogListener']
+from psycopg2 import connect
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+from twisted.internet import task, reactor
+from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IFileDescriptor, IReadDescriptor
+from zope.interface import implements
+
+from sparkle.util import call_sync
 
 
-class ListenerError(Exception):
-    """Generic listener error"""
-
-class ChangelogListener:
+class DatabaseListener(object):
     """
-    Listener for watching the changes in the database
-    and passing them further
+    Listener for watching the changes in the database.
     """
+
+    implements(IReadDescriptor, IFileDescriptor)
+
     def __init__(self, conn_string):
         """
-        Create connection to db using connection string
+        Create connection to db using connection string.
         """
 
-        # Connect to the database.
-        self.conn = psycopg2.connect(str(conn_string))
+        # Save the connection string.
+        self.conn_string = str(conn_string)
+
+        # Place for the future connection instance.
+        self.conn = None
 
         # Start with empty set of change listeners.
         self.callbacks = set()
@@ -36,8 +47,8 @@ class ChangelogListener:
         # Accumulated changes from the same transaction.
         self.changes = []
 
-        # Looping calls that take care of getting changes from the database.
-        self.poller = None
+        # Looping call that take care of corking changes made by
+        # administrators directly in the database.
         self.corker = None
 
     def add_callback(self, callback):
@@ -48,43 +59,74 @@ class ChangelogListener:
         """De-register previously added callback."""
         self.callbacks.discard(callback)
 
-    def block_until_transaction(self, txid):
+    def register(self, txid):
         """
-        Produce deferred that will wait until the transaction completes.
+        Register deferred for given transaction id.
+        """
+
+        if txid in self.transactions:
+            raise KeyError('someone is already waiting for txid %i' % txid)
+
+        self.transactions[txid] = Deferred()
+
+    def abort(self, txid):
+        """
+        Stop waiting for given transaction id.
         """
 
         if txid not in self.transactions:
-            self.transactions[txid] = Deferred()
+            raise KeyError('no-one is waiting for txid %i' % txid)
 
+        self.transactions.pop(txid)
+
+    def wait(self, txid):
+        """Produce deferred that will wait until the transaction completes."""
         return self.transactions[txid]
+
+    def connect(self):
+        """
+        Connect to database and start receiving changes.
+        """
+
+        print 'database listener connecting'
+
+        self.conn = connect(self.conn_string)
+        self.conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+
+        with self.conn.cursor() as curs:
+            curs.execute("LISTEN changelog;")
+
+        print 'database listener connected successfully'
+
+    def fileno(self):
+        return self.conn.fileno()
+
+    def shutdown(self):
+        print 'shutting down database listener'
+        reactor.removeReader(self)
+        self.conn.close()
+        self.conn = None
+        self.corker.stop()
+        self.corker = None
+
+    def connectionLost(self, reason):
+        pass
 
     def start(self):
         """
         Start forwarding changes to registered handlers.
         """
 
-        self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        with self.conn.cursor() as curs:
-            curs.execute("LISTEN changelog;")
+        # Connect to the database.
+        self.connect()
 
-        self.poller = task.LoopingCall(self.poll)
-        self.poller.start(0.2)
+        # Start receiving descriptor events.
+        reactor.addReader(self)
 
+        # Start periodic corking of changes made in the database
+        # manually by administrators.
         self.corker = task.LoopingCall(self.cork)
         self.corker.start(5.0)
-
-    def stop(self):
-        """
-        Stop listening to transaction changes.
-        """
-
-        if self.poller is not None:
-            self.poller.stop()
-            self.poller = None
-
-        if self.corker is not None:
-            self.corker.stop()
-            self.corker = None
 
     def cork(self):
         """
@@ -96,31 +138,43 @@ class ChangelogListener:
             curs.execute('SELECT cork() AS cork;')
             return int(curs.fetchone()[0])
 
-    def poll(self):
+    def flush(self):
+        """
+        Flush transaction changes to callbacks.
+        """
+
+        # Unblock any waiting threads.
+        if self.txid in self.transactions:
+            self.transactions[self.txid].callback(self.txid)
+
+        # Notify listeners about new completed transaction.
+        for callback in self.callbacks:
+            reactor.callLater(0, callback, self.changes)
+
+        # Reset accumulated changes and transaction id.
+        self.changes = []
+        self.txid = None
+
+    def doRead(self):
         """
         Receive fresh changes from the database.
         """
 
         self.conn.poll()
 
-        while len(self.conn.notifies) > 0:
-            item = loads(self.conn.notifies.pop().payload)
+        if len(self.conn.notifies) > 0:
+            # There are some pending notifications, plan one more poll
+            # right after we process this one just to make sure we have
+            # consumed all the events.
+            reactor.callLater(0, self.doRead)
 
+        while len(self.conn.notifies) > 0:
+            # Pop one notification off the queue.
+            item = loads(self.conn.notifies.pop(0).payload)
+
+            # Parse first two arguments - type of operation and transaction.
             op   = item[0]
             txid = int(item[1])
-
-            def flush():
-                # Notify listeners about new completed transaction.
-                for callback in self.callbacks:
-                    callback(self.changes)
-
-                # Reset accumulated changes and transaction id.
-                self.changes = []
-                self.txid = txid
-
-                # Unblock any waiting threads.
-                if txid in self.transactions:
-                    self.transactions.pop(txid).callback(txid)
 
             if self.txid is None:
                 # First transaction should not trigger a flush.
@@ -128,7 +182,8 @@ class ChangelogListener:
 
             if self.txid != txid:
                 # Flush on txid change.
-                flush()
+                self.flush()
+                self.txid = txid
 
             if op == 'u':
                 # Accumulate changes.
@@ -142,9 +197,12 @@ class ChangelogListener:
 
                 self.changes.append(change)
 
-            elif op == 'c':
+            elif op == 'cork':
                 # Flush on every cork operation.
-                flush()
+                self.flush()
+
+    def logPrefix(self):
+        return 'listener'
 
 
 # vim:set sw=4 ts=4 et:

@@ -1,7 +1,10 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-__all__ = ['split_list', 'uuidgen']
+__all__ = ['split_list', 'uuidgen', 'call_sync']
+
+from twisted.internet.threads import blockingCallFromThread
+from twisted.internet import reactor
 
 from uuid import uuid4
 
@@ -42,6 +45,11 @@ def uuidgen():
     Generates random UUID string.
     """
     return str(uuid4())
+
+
+def call_sync(fn, *args, **kwargs):
+    """Perform blockingCallFromThread on default reactor."""
+    return blockingCallFromThread(reactor, fn, *args, **kwargs)
 
 
 # vim:set sw=4 ts=4 et:

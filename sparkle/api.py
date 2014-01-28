@@ -14,7 +14,6 @@ authentication.
 
 __all__ = ['make_sparkle_app']
 
-from twisted.internet.threads import blockingCallFromThread
 from twisted.internet import reactor
 from werkzeug.exceptions import BadRequest, InternalServerError, NotFound, \
                                 Unauthorized
@@ -26,6 +25,7 @@ from operator import add
 from time import time
 from collections import Mapping
 
+from sparkle.util import call_sync
 from sparkle.schema import schema
 from sparkle.rest import Flaskful, json_response
 from sparkle.auth import sign_token
@@ -97,12 +97,44 @@ def make_sparkle_app(manager):
         """
 
         try:
+            # Convert placeholders in the input patch to actual uuids.
+            # Returns mapped placeholders for client to orient himself.
             uuids = preprocess_dbdict_patch(patch)
+
+            # Apply patch to the database.
             apply_patch(Children(manager.db, schema.root), patch)
-            manager.db.commit()
+
+            # Determine our transaction id.
+            txid = int(manager.db.execute('SELECT cork();').fetchone()[0])
+
+            # Register our completion watch.
+            call_sync(manager.listener.register, txid)
+
+            try:
+                # Attempt to commit the transaction.
+                manager.db.commit()
+            except:
+                # Transaction failed, remove the completion watch.
+                call_sync(manager.listener.abort, txid)
+
+                # Re-raise the exception.
+                raise
+
+            # Wait for the transaction to propagate.
+            call_sync(manager.listener.wait, txid)
+
+            # Stop waiting for the transaction.
+            call_sync(manager.listener.abort, txid)
+
+            # Return mapped uuids to the client now, when all data safely
+            # hit the model and he will be able to retrieve them.
             return uuids
-        except Exception, e:
+
+        except:
+            # Roll back the transaction on any error.
             manager.db.rollback()
+
+            # Re-raise the exception.
             raise
 
     def make_handlers(path):
@@ -151,7 +183,7 @@ def make_sparkle_app(manager):
                 jschema = make_json_schema(cache, credentials, False)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
-                data = blockingCallFromThread(reactor, manager.list_collection, path, keys)
+                data = call_sync(manager.list_collection, path, keys)
                 return json_response(remove_nulls(data))
 
             if 'POST' == flask.request.method:
@@ -180,7 +212,7 @@ def make_sparkle_app(manager):
                 jschema = make_json_schema(cache, credentials, False)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
-                data = blockingCallFromThread(reactor, manager.get_entity, path, keys)
+                data = call_sync(manager.get_entity, path, keys)
                 return json_response(remove_nulls(data))
 
             if 'DELETE' == flask.request.method:
@@ -247,9 +279,7 @@ def make_sparkle_app(manager):
     @app.route_json('/v1/tenant/<string:tenant>/token')
     @app.require_credentials(manager)
     def tenant_token(credentials={}, tenant=None):
-        tenant_row = blockingCallFromThread(reactor,
-                                            manager.model['tenant'].get,
-                                            tenant)
+        tenant_row = call_sync(manager.model['tenant'].get, tenant)
 
         if tenant_row is None:
             raise NotFound('invalid tenant')
@@ -257,15 +287,12 @@ def make_sparkle_app(manager):
         if 'tenant' in credentials:
             return make_token_result(credentials)
 
-        user = blockingCallFromThread(reactor,
-                                      manager.model['user'].get,
-                                      credentials['user'])
+        user = call_sync(manager.model['user'].get, credentials['user'])
 
         if user is None or not user.desired.get('alicorn'):
-            member = blockingCallFromThread(reactor,
-                                            manager.model['member'].one,
-                                            tenant=tenant,
-                                            user=credentials['user'])
+            member = call_sync(manager.model['member'].one,
+                               tenant=tenant,
+                               user=credentials['user'])
 
             if member is None:
                 raise Unauthorized('you are not a member of the tenant')
@@ -284,7 +311,7 @@ def make_sparkle_app(manager):
     if app.debug:
         @app.route_json('/v1/dump')
         def dump():
-            return blockingCallFromThread(reactor, manager.model.dump)
+            return call_sync(manager.model.dump)
 
     # Ta-dah?
     return app
