@@ -27,7 +27,7 @@ from collections import Mapping
 
 from sparkle.util import call_sync
 from sparkle.schema import schema
-from sparkle.rest import Flaskful, json_response
+from sparkle.rest import Flaskful
 from sparkle.auth import sign_token
 from sparkle.patch import validate_patch, apply_patch, split
 from sparkle.dbdict import validate_dbdict_fragment, make_schema, \
@@ -171,7 +171,7 @@ def make_sparkle_app(manager):
                     op['from'] = jpath + split(op['from'])
                     validate_dbdict_fragment(jschema, {}, op['from'])
 
-            return json_response({'uuids': apply_valid_patch(patch)}, 202)
+            return {'uuids': apply_valid_patch(patch)}
 
         @app.require_credentials(manager)
         @convert_errors
@@ -184,7 +184,7 @@ def make_sparkle_app(manager):
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = call_sync(manager.list_collection, path, keys)
-                return json_response(remove_nulls(data))
+                return remove_nulls(data)
 
             if 'POST' == flask.request.method:
                 data = loads(flask.request.data)
@@ -197,7 +197,7 @@ def make_sparkle_app(manager):
                 jschema = make_json_schema(cache, credentials, True)
                 validate_dbdict_fragment(jschema, data, post_path)
                 patch = [{'op': 'add', 'path': post_path, 'value': data}]
-                return json_response({'uuids': apply_valid_patch(patch)}, 202)
+                return {'uuids': apply_valid_patch(patch)}
 
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, keys, cache, jpath)
@@ -213,14 +213,14 @@ def make_sparkle_app(manager):
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 data = call_sync(manager.get_entity, path, keys)
-                return json_response(remove_nulls(data))
+                return remove_nulls(data)
 
             if 'DELETE' == flask.request.method:
                 jschema = make_json_schema(cache, credentials, True)
                 validate_dbdict_fragment(jschema, {}, jpath)
 
                 patch = [{'op': 'remove', 'path': jpath}]
-                return json_response({'uuids': apply_valid_patch(patch)}, 202)
+                return {'uuids': apply_valid_patch(patch)}
 
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, keys, cache, jpath)
@@ -237,10 +237,10 @@ def make_sparkle_app(manager):
         collection_handler, entity_handler = make_handlers(path)
 
         methods = ['GET', 'DELETE', 'PATCH']
-        app.route(rule, methods=methods)(entity_handler)
+        app.route_json(rule, methods=methods)(entity_handler)
 
         methods = ['GET', 'POST', 'PATCH']
-        app.route(dirname(rule) + '/', methods=methods)(collection_handler)
+        app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
 
     # Top-level endpoint for capabilitites reporting.
     @app.route_json('/')
