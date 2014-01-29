@@ -7,10 +7,11 @@ from twisted.internet import task, reactor
 from twisted.internet.threads import deferToThread
 from sqlalchemy.exc import OperationalError
 
-from sparkle.model import Model
+from sparkle.model import Model, Row
 from sparkle.schema import schema
 from sparkle.listener import DatabaseListener
 from sparkle.twilight import Twilight
+from sparkle.placement import Placement
 
 
 class Manager(object):
@@ -44,9 +45,16 @@ class Manager(object):
         # state information about our communication with them.
         self.hosts = {}
 
-        # Mapping of (name, pkey) pairs to hosts the rows were placed on.
+        # Mapping of `(name, pkey)` pairs to hosts the rows were placed on.
         # Very relevant to the placement algorithm.
-        self.placement = {}
+        self.rows = {}
+
+        # Hook up the placement implementation with manager.
+        self.placement = Placement(self)
+
+        # Watch for model updates to be forwarded to placement and
+        # individual hosts.
+        self.model.add_callback(self.on_row_changed)
 
 
     def start(self):
@@ -120,18 +128,95 @@ class Manager(object):
         self.model.commit()
 
 
+    def on_row_changed(self, old, new):
+        """
+        Trigger placement algorithm and forward the change to hosts that
+        the row have been placed on.
+        """
+
+        # Update placement and possible send deletes out immediately.
+        self.placement.on_row_changed(old, new)
+
+        # When desired state changed, we need to send out updates to
+        # hosts that have the row placed on them.
+        if new.desired != old.desired:
+            # Prepare the change in the usual format.
+            change = (new.table.name, new.pkey, 'desired', new.desired)
+
+            # Find what hosts should receive the update.
+            for host in self.rows.get((new.table.name, new.pkey), []):
+                # The placement should have been withdrawn on remove!
+                assert new.desired is not None
+
+                if host in self.hosts:
+                    # Distribute the change to relevant hosts.
+                    self.hosts[host].send_changes([change])
+
+
     def receive(self, message, sender):
         if message['uuid'] not in self.hosts:
             self.hosts[message['uuid']] = Twilight(self, message['uuid'])
         self.hosts[message['uuid']].receive(message, sender)
 
 
-    def send_changes(self, host, changes):
-        """Sends a bulk of changes to given host."""
-        # Get the routing key for the host. It is different from it's uuid.
-        if host not in self.hosts:
-            return
-        self.hosts[host].send_changes(changes)
+    def bestow(self, host, row, owner):
+        """
+        Place selected row on a host with defined owner row.
+
+        It is possible to define both row and owner as a `(name, pkey)`
+        tuple instead.  Host can be either it's uuid or a Twilight instance.
+        """
+
+        if isinstance(host, basestring):
+            if host not in self.hosts:
+                self.hosts[host] = Twilight(self, host)
+            host = self.hosts[host]
+
+        if isinstance(row, Row):
+            row = (row.table.name, row.pkey)
+
+        if isinstance(owner, Row):
+            owner = (owner.table.name, owner.pkey)
+
+        print 'bestow %r to %s for %r' % (row, host.uuid, owner)
+
+        hosts = self.rows.setdefault(row, set())
+        hosts.add(host.uuid)
+
+        owners = host.desired_state.setdefault(row, set())
+        owners.add(owner)
+
+    def withdraw(self, host, row, owner):
+        """
+        Remove row placement on given host for specified owner.
+
+        As with `bestow()` the host, row and owner can be supplied as
+        either identificators or corresponding objects.
+        """
+
+        if isinstance(host, basestring):
+            host = self.hosts[host]
+
+        if isinstance(row, Row):
+            row = (row.table.name, row.pkey)
+
+        if isinstance(owner, Row):
+            owner = (owner.table.name, owner.pkey)
+
+        print 'withdraw %r from %s for %r' % (row, host.uuid, owner)
+
+        owners = host.desired_state.setdefault(row, set())
+        owners.discard(owner)
+
+        if 0 == len(owners):
+            del host.desired_state[row]
+            host.send_changes([row[0], row[1], 'desired', None])
+
+        hosts = self.rows.setdefault(row, set())
+        hosts.discard(host.uuid)
+
+        if 0 == len(hosts):
+            del self.rows[row]
 
 
     def list_collection(self, path, keys):

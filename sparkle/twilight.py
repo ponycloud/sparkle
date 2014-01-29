@@ -35,8 +35,9 @@ class Twilight(object):
         self.current_state = set()
 
         # Desired state rows we have been assigned from the placement
-        # algorithm via the manager.
-        self.desired_state = set()
+        # algorithm via the manager.  Every assigned `(name, pkey)`
+        # tuple points to a set of owners that caused the placement.
+        self.desired_state = {}
 
         # Send keep-alive message every few seconds.
         self.keep_alive = task.LoopingCall(self.send_changes, [])
@@ -93,17 +94,13 @@ class Twilight(object):
         """
 
         self.local_sequence = 0
-        self.send_changes(list(self.iter_desired_state()))
 
-
-    def iter_desired_state(self):
-        """
-        Dump complete desired state for current host as a list of changes.
-        """
-
+        changes = []
         for name, pkey in self.desired_state:
             part = self.manager.model[name][pkey].desired
-            yield (name, pkey, 'desired', part)
+            changes.append((name, pkey, 'desired', part))
+
+        self.send_changes(changes)
 
 
     def update(self, message):

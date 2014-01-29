@@ -1,7 +1,7 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-__all__ = ['Model']
+__all__ = ['Model', 'Table', 'Row']
 
 
 from sparkle.schema import schema
