@@ -130,6 +130,7 @@ extent:
 
 host:
   pkey: uuid
+  user-pkey: true
   mount:
     /host:
       access: protected
@@ -207,16 +208,6 @@ storage_pool:
 
 switch:
   pkey: uuid
-  mount:
-    /switch:
-      access: shared
-
-    /tenant/switch:
-      access: tenant/user
-
-switch:
-  pkey: uuid
-  access: shared
   mount:
     /tenant/switch:
       access: tenant/user

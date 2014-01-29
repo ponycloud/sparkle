@@ -50,6 +50,7 @@ class Table(object):
         self.index = set(table.get('index', []))
         self.fkeys = set()
         self.virtual = table.get('virtual', False)
+        self.user_pkey = table.get('user-pkey', False)
         self.endpoints = {}
 
         if isinstance(self.pkey, basestring):

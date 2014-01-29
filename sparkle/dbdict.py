@@ -412,7 +412,8 @@ class Collection(DbDict):
         for k, v in fragment.items():
             # Only enforce on uuid or composite keys.
             if cschema.table.pkey == 'uuid' or \
-               not isinstance(cschema.table.pkey, basestring):
+               not isinstance(cschema.table.pkey, basestring) \
+               and not cschema.table.user_pkey:
 
                 # If the key is not a valid uuid, treat it as a placeholder
                 # and generate new replacement uuid.
@@ -585,6 +586,10 @@ class Desired(DbDict):
         uuid_pkeys = set(['uuid'])
         uuid_fkeys = set()
 
+        # Except when we explicitly want user-defined uuids.
+        if dschema.table.user_pkey:
+            uuid_pkeys = set()
+
         # Include all composite primary key fields if applicable.
         if not isinstance(dschema.table.pkey, basestring):
             for pkey in dschema.table.pkey:
@@ -593,7 +598,8 @@ class Desired(DbDict):
         # And definitely add all foreign keys that have an 'uuid'
         # primary key as their target.
         for fkey in dschema.table.fkeys:
-            if schema.tables[fkey].pkey == 'uuid':
+            ftable = schema.tables[fkey]
+            if ftable.pkey == 'uuid' and not ftable.user_pkey:
                 uuid_fkeys.add(fkey)
 
         # Adjust fields as needed.
