@@ -337,7 +337,7 @@ class Row(object):
             row = self
             mnt = endpoint
 
-            while mnt.parent.table is not None:
+            while mnt.table is not None:
                 if mnt.table.name == 'tenant':
                     tenants.add(row.pkey)
                     break
