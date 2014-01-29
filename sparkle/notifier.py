@@ -30,39 +30,31 @@ class Notifier(WampServerFactory):
         Create hooks in model used for the distribution of notifications.
         """
 
-        def make_model_handler(operation):
-            def model_handler(table, row):
-                message = {
-                    'operation': operation,
-                    'type': table.name,
-                    'pkey-name': table.schema.pkey,
-                    'pkey': row.pkey,
-                    'desired': row.desired,
-                    'current': row.current
-                }
+        def update_handler(old, new):
+            message = {
+                'type':      new.table.name,
+                'pkey_name': new.table.schema.pkey,
+                'pkey':      new.pkey,
+                'desired':   new.desired,
+                'current':   new.current,
+            }
 
-                allowed = row.get_tenants()
+            allowed = old.get_tenants().union(new.get_tenants())
 
-                # TODO: Send info about entities that would match
-                #       shared-access endpoints, such as public images.
+            # TODO: Send info about entities that would match
+            #       shared-access endpoints, such as public images.
 
-                if len(allowed) > 0:
-                    # Publish event to all interested tenants.
-                    for tenant in allowed:
-                        self.publish(tenant, message)
-                else:
-                    # Publish event only to alicorns.
-                    # NOTE: Due to the missing public entity notifications
-                    #       alicorns now get notifications about them as well.
-                    self.publish('alicorns', message)
+            if len(allowed) > 0:
+                # Publish event to all interested tenants.
+                for tenant in allowed:
+                    self.publish(tenant, message)
+            else:
+                # Publish event only to alicorns.
+                # NOTE: Due to the missing public entity notifications
+                #       alicorns now get notifications about them as well.
+                self.publish('alicorns', message)
 
-            return model_handler
-
-        for table_name, table in self.model.iteritems():
-            table.on_create_state(make_model_handler('create'))
-            table.on_update_state(make_model_handler('update'))
-            table.on_before_delete_state(make_model_handler('delete'))
-
+        self.model.add_callback(update_handler)
         reactor.listenTCP(self.port, self)
 
     def get_channels(self, tenants=[], public=False, alicorn=False):

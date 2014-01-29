@@ -25,10 +25,30 @@ class Model(dict):
         for name, table in schema.tables.iteritems():
             self[name] = Table(self, name, table)
 
-        # Queue with callbacks triggered by row updates.
-        # Flush using self.commit().
-        self.callbacks = []
+        # Original states of the row parts before the transaction.
+        self.undo = {}
 
+        # New states of the row parts after the transaction.
+        self.redo = {}
+
+        # Callbacks that wish to be notified about changed rows when
+        # the transaction is committed.
+        self.callbacks = set()
+
+    def add_callback(self, callback):
+        """
+        Add callback to be notified about row changes.
+
+        Every transaction will execute the callback for every changed row
+        with old state of the row as the first and new state of the row as
+        the second argument.
+        """
+
+        self.callbacks.add(callback)
+
+    def remove_callback(self, callback):
+        """Remove previously added callback."""
+        self.callbacks.discard(callback)
 
     def dump(self, states=['desired', 'current']):
         """
@@ -48,28 +68,28 @@ class Model(dict):
 
         return out
 
-
     def load(self, data):
         """
-        Load previously dumped data in one transaction.
+        Load previously dumped data.
+
+        Do not forget to `commit()` the changes to the model afterwards.
         """
 
         for name, pkey, state, part in data:
-            self[name].update_row(pkey, state, part)
-
-        self.commit()
-
+            self[name].replace_row(self[name].changed_row(pkey, state, part))
 
     def commit(self):
         """
-        Run all pending callbacks.
+        Run all pending callbacks and drop the undo data.
         """
 
-        for callback in self.callbacks:
-            callback()
+        for key, new_row in self.redo.iteritems():
+            old_row = self.undo[key]
+            for callback in self.callbacks:
+                callback(old_row, new_row)
 
-        self.callbacks = []
-
+        self.undo = {}
+        self.redo = {}
 
     def path_row(self, path, keys):
         """
@@ -98,7 +118,6 @@ class Model(dict):
             row = self[name].one(**filter)
 
         return row
-# /class Model
 
 
 class Table(dict):
@@ -125,135 +144,43 @@ class Table(dict):
         self.index = {i: {'desired': {}, 'current': {}} \
                       for i in self.schema.index}
 
-        # Callbacks that subscribe to row events.
-        self.before_row_update_callbacks = []
-        self.after_row_update_callbacks = []
-        self.create_state_callbacks = []
-        self.update_state_callbacks = []
-        self.delete_state_callbacks = []
-        self.before_delete_state_callbacks = []
-
-
-    def on_before_row_update(self, callback, states=['desired', 'current']):
-        """Register function to call before modifying a row."""
-        for rec in self.before_row_update_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.before_row_update_callbacks.append({'callback': callback,
-                                                 'states': states})
-
-
-    def on_after_row_update(self, callback, states=['desired', 'current']):
-        """Register function to call after a row is modified."""
-        for rec in self.after_row_update_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.after_row_update_callbacks.append({'callback': callback,
-                                                 'states': states})
-
-
-    def on_create_state(self, callback, states=['desired', 'current']):
-        """Register function to call after a state is created."""
-        for rec in self.create_state_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.create_state_callbacks.append({'callback': callback,
-                                            'states': states})
-
-    def on_update_state(self, callback, states=['desired', 'current']):
-        """register function to call after a state is updated."""
-        for rec in self.update_state_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.update_state_callbacks.append({'callback': callback,
-                                            'states': states})
-
-
-    def on_delete_state(self, callback, states=['desired', 'current']):
-        """register function to call after a state is deleted."""
-        for rec in self.delete_state_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.delete_state_callbacks.append({'callback': callback,
-                                            'states': states})
-
-    def on_before_delete_state(self, callback, states=['desired', 'current']):
-        """register function to call after a state is deleted."""
-        for rec in self.before_delete_state_callbacks:
-            if rec['callback'] == callback:
-                rec['states'] = states
-                return
-
-        self.before_delete_state_callbacks.append({'callback': callback,
-                                                   'states': states})
-
-
-
-    def update_row(self, pkey, state, part):
+    def changed_row(self, pkey, state, part):
         """
-        Update/patch table row.
-
-        Partial row contents are used to patch the row in question.
-        If the part value is None, the specified state is completely
-        removed and if the row have no states, it is deleted completely.
+        Create modified row object from a change and table data.
         """
 
         if pkey in self:
-            # Row already exists, unindex it so that it can be modified.
-            row = self[pkey]
-            row.unindex(self)
+            row = self[pkey].clone()
         else:
-            # Create new row object and add it to the table.
-            self[pkey] = row = Row(self, pkey)
+            row = Row(self, pkey)
 
-        # Fire callbacks to inform subscribers that the row will change.
-        for rec in self.before_row_update_callbacks:
-            if state in rec['states']:
-                self.model.callbacks.append(lambda: rec['callback'](self, row))
+        setattr(row, state, part)
+        return row
 
-        # {create, update, delete} callbacks interested in this event.
-        state_callbacks = []
+    def replace_row(self, new_row):
+        """
+        Replace row with a modified one.
+        """
 
-        if part is None:
-            if getattr(row, state) is not None:
-                # Fire callbacks just before delete
-                for rec in self.before_delete_state_callbacks:
-                    if state in rec['states']:
-                        self.model.callbacks.append(lambda: rec['callback'](self, row))
+        pkey = new_row.pkey
 
-                state_callbacks = self.delete_state_callbacks
-            setattr(row, state, None)
+        if pkey in self:
+            old_row = self[pkey]
+            old_row.unindex(self)
         else:
-            # Patch the corresponding row part.
-            if getattr(row, state) is None:
-                state_callbacks = self.create_state_callbacks
-                setattr(row, state, part)
-            else:
-                state_callbacks = self.update_state_callbacks
-                getattr(row, state).update(part)
+            old_row = Row(self, pkey)
 
-        if row.desired is None and row.current is None:
-            # Delete the row completely.
-            del self[pkey]
+        if new_row.desired is None and new_row.current is None:
+            if pkey in self:
+                del self[pkey]
         else:
-            # Index the updated row.
-            row.index(self)
+            self[pkey] = new_row
+            new_row.index(self)
 
-        # Fire both after-row and state callbacks.
-        for rec in self.after_row_update_callbacks + state_callbacks:
-            if state in rec['states']:
-                self.model.callbacks.append(lambda: rec['callback'](self, row))
+        if not (self.name, pkey) in self.model.undo:
+            self.model.undo[(self.name, pkey)] = old_row
 
+        self.model.redo[(self.name, pkey)] = new_row
 
     def list(self, **keys):
         """
@@ -278,7 +205,6 @@ class Table(dict):
 
         return [self[k] for k in selection]
 
-
     def one(self, **keys):
         """
         Same as list(), but returns just one item.
@@ -302,21 +228,25 @@ class Table(dict):
             assign_callback(table, row, row.get_desired('host'))
         return f
 
-# /class Table
-
 
 class Row(object):
     # Each row have two parts, one for each "state".
     __slots__ = ['table', 'pkey', 'desired', 'current']
 
 
-    def __init__(self, table, pkey):
-        """Initializes the row."""
+    def __init__(self, table, pkey, desired=None, current=None):
+        """
+        Initializes the row.
+        """
+
         self.pkey = pkey
         self.table = table
-        self.desired = None
-        self.current = None
+        self.desired = desired
+        self.current = current
 
+    def clone(self):
+        """Clone an existing row."""
+        return Row(self.table, self.pkey, self.desired, self.current)
 
     def get_tenants(self):
         """
@@ -353,20 +283,17 @@ class Row(object):
 
         return tenants
 
-
     def get_current(self, key, default=None):
         """Get value for given key in the current state."""
         if self.current is None or key not in self.current:
             return default
         return self.current[key]
 
-
     def get_desired(self, key, default=None):
         """Get value for given key in the current state."""
         if self.desired is None or key not in self.desired:
             return default
         return self.desired[key]
-
 
     def index(self, table):
         """Index the row into the table's indexes."""
@@ -376,7 +303,6 @@ class Row(object):
                 if part is not None and idx in part:
                     table.index[idx][state].setdefault(part[idx], set())
                     table.index[idx][state][part[idx]].add(self.pkey)
-
 
     def unindex(self, table):
         """Remove the row from table's indexes."""
@@ -389,16 +315,13 @@ class Row(object):
                         if 0 == len(table.index[idx][state][part[idx]]):
                             del table.index[idx][state][part[idx]]
 
-
     def to_dict(self):
         return {'desired': self.desired, 'current': self.current}
-
 
     def __repr__(self):
         desired = ' +desired' if self.desired is not None else ''
         current = ' +current' if self.current is not None else ''
         return '<Row %s%s%s>' % (self.pkey, desired, current)
-# /class Row
 
 
 # vim:set sw=4 ts=4 et:

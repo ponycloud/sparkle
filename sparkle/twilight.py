@@ -203,6 +203,7 @@ class Twilight(object):
 
         # Load the changes into the model in one go.
         self.manager.model.load(changes)
+        self.manager.model.commit()
 
 
     def replace_current_state(self, changes):
@@ -229,6 +230,7 @@ class Twilight(object):
 
         # Load the changes into the model in one go.
         self.manager.model.load(changes + delete_changes)
+        self.manager.model.commit()
 
 
 # vim:set sw=4 ts=4 et:

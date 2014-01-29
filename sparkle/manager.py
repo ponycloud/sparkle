@@ -105,6 +105,7 @@ class Manager(object):
         def success(data):
             print 'data successfully loaded'
             self.model.load(data)
+            self.model.commit()
 
             # Start processing database changes.
             self.listener.start()
@@ -116,6 +117,7 @@ class Manager(object):
     def apply_changes(self, changes):
         """Incorporate changes from database into the model."""
         self.model.load(changes)
+        self.model.commit()
 
 
     def receive(self, message, sender):
