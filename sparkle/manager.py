@@ -139,15 +139,12 @@ class Manager(object):
 
         # When desired state changed, we need to send out updates to
         # hosts that have the row placed on them.
-        if new.desired != old.desired:
+        if new.desired and new.desired != old.desired:
             # Prepare the change in the usual format.
             change = (new.table.name, new.pkey, 'desired', new.desired)
 
             # Find what hosts should receive the update.
             for host in self.rows.get((new.table.name, new.pkey), []):
-                # The placement should have been withdrawn on remove!
-                assert new.desired is not None
-
                 if host in self.hosts:
                     # Distribute the change to relevant hosts.
                     self.hosts[host].send_changes([change])
@@ -184,6 +181,14 @@ class Manager(object):
         hosts.add(host.uuid)
 
         owners = host.desired_state.setdefault(row, set())
+
+        if len(owners) == 0:
+            name, pkey = row
+            if pkey in self.model[name]:
+                desired = self.model[name][pkey].desired
+                if desired:
+                    host.send_changes((name, pkey, 'desired', desired))
+
         owners.add(owner)
 
     def withdraw(self, host, row, owner):
