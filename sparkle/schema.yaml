@@ -293,3 +293,11 @@ host_volume:
     /host/volume:
       access: protected
 
+host_storage_pool:
+  pkey: [host, storage_pool]
+  virtual: true
+  mount:
+    /host/storage-pool:
+      access: protected
+
+
