@@ -46,35 +46,38 @@ class Placement(object):
 
     def on_nic_changed(self, old, new):
         """
-        Place configuration for nic
+        Place nic on it's respective host.
         """
+
         if new.desired:
             host = new.desired['host']
             self.manager.bestow(host, new, new)
-        else:
+        elif old.desired:
             host = old.desired['host']
             self.manager.withdraw(host, old, old)
 
     def on_bond_changed(self, old, new):
         """
-        Place configuration for bond
+        Place bond on it's respective host.
         """
+
         if new.desired:
             host = new.desired['host']
             self.manager.bestow(host, new, new)
-        else:
+        elif old.desired:
             host = old.desired['host']
             self.manager.withdraw(host, old, old)
 
     def on_nic_role_changed(self, old, new):
         """
-        Place nic role for a host matched through the role's bond
+        Place network role for a host matched through the role's bond.
         """
+
         if new.desired:
             bond = self.manager.model['bond'][new.desired['bond']]
             host = bond.desired['host']
             self.manager.bestow(host, new, bond)
-        else:
+        elif old.desired:
             bond = self.manager.model['bond'][old.desired['bond']]
             host = bond.desired['host']
             self.manager.withdraw(host, old, bond)
