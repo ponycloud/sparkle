@@ -187,7 +187,7 @@ class Manager(object):
             if pkey in self.model[name]:
                 desired = self.model[name][pkey].desired
                 if desired:
-                    host.send_changes((name, pkey, 'desired', desired))
+                    host.send_changes([(name, pkey, 'desired', desired)])
 
         owners.add(owner)
 
@@ -215,7 +215,7 @@ class Manager(object):
 
         if 0 == len(owners):
             del host.desired_state[row]
-            host.send_changes([row[0], row[1], 'desired', None])
+            host.send_changes([(row[0], row[1], 'desired', None)])
 
         hosts = self.rows.setdefault(row, set())
         hosts.discard(host.uuid)
