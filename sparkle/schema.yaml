@@ -267,6 +267,7 @@ volume:
 
 host_disk:
   pkey: [host, disk]
+  index: [storage_pool]
   virtual: true
   mount:
     /host/disk:
