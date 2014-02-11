@@ -97,8 +97,9 @@ class Twilight(object):
 
         changes = []
         for name, pkey in self.desired_state:
-            part = self.manager.model[name][pkey].desired
-            changes.append((name, pkey, 'desired', part))
+            if pkey in self.manager.model[name]:
+                part = self.manager.model[name][pkey].desired
+                changes.append((name, pkey, 'desired', part))
 
         self.send_changes(changes)
 
@@ -153,18 +154,32 @@ class Twilight(object):
             return False
 
         if part is not None:
-            # Check that data are either None or a dict.
+            # Valid data must be a dict.
             if not isinstance(part, dict):
                 return False
 
-            # Rows must have their primary keys.
-            if schema.tables[name].pkey not in part:
-                return False
+            if isinstance(schema.tables[name].pkey, basestring):
+                # Primary key is a single column, which needs to
+                # be present in the payload.
+                if schema.tables[name].pkey not in part:
+                    return False
 
-            # Primary key in the entity must match the primary key in
-            # the payload.  Weird, why do we even send it twice..?
-            if part[schema.tables[name].pkey] != pkey:
-                return False
+                # And match the primary key specified in the change record.
+                if part[schema.tables[name].pkey] != pkey:
+                    return False
+
+            else:
+                # In this case, we have a multi-column primary key.
+                for i in xrange(len(schema.tables[name].pkey)):
+                    key = schema.tables[name].pkey[i]
+
+                    # All key parts must be present in the payload.
+                    if key not in part:
+                        return False
+
+                    # And match the parts given in the change record.
+                    if part[key] != pkey[i]:
+                        return False
 
         # Entity seems acceptable.
         return True
