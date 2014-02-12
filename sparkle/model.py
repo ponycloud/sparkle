@@ -316,7 +316,22 @@ class Row(object):
                             del table.index[idx][state][part[idx]]
 
     def to_dict(self):
-        return {'desired': self.desired, 'current': self.current}
+        """
+        Convert row to a dictionary with pkey, desired and current.
+
+        Both desired and current may be missing if that part is not
+        present in the row.
+        """
+
+        result = {'pkey': self.pkey}
+
+        if self.current:
+            result['current'] = self.current
+
+        if self.desired:
+            result['desired'] = self.desired
+
+        return result
 
     def __repr__(self):
         desired = ' +desired' if self.desired is not None else ''
