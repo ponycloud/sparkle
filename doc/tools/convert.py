@@ -61,42 +61,41 @@ for table in root.findall('{ns}layer/{ns}object[@type="Database - Table"]'.forma
 	}
 
 for references in root.findall('{ns}layer/{ns}object[@type="Database - Reference"]'.format(ns=nsUrl)):
-	table_references = references.findall('{ns}connections/{ns}connection'.format(ns=nsUrl))
+    table_references = references.findall('{ns}connections/{ns}connection'.format(ns=nsUrl))
+    """
+        table connection numbers are like this:
+        0 1 2 3 4    -> top edge
+        5       6	 -> header with table name
+        ----------
+        12		13	 -> attributes
+        14		15
+        16		...
+        ----------
+        7 8 9 10 11  -> bottom edge
+    """
+# not linked to attribute - incoming reference from different table
+    if  int(table_references[0].attrib['connection']) < 12:
+        ref_to = table_references[0]
+        ref_from = table_references[1]
+# outgoing attribute to different table
+    else:
+        ref_to = table_references[1]
+        ref_from = table_references[0]
 
-	"""
-		table connection numbers are like this:
-		0 1 2 3 4    -> top edge
-		5       6	 -> header with table name
-		----------
-		12		13	 -> attributes
-		14		15
-		16		...
-		----------
-		7 8 9 10 11  -> bottom edge
-	"""
-	# not linked to attribute - incoming reference from different table
-	if  int(table_references[0].attrib['connection']) < 12:
-		ref_to = table_references[0]
-		ref_from = table_references[1]
-	# outgoing attribute to different table
-	else:
-		ref_to = table_references[1]
-		ref_from = table_references[0]
+    from_attribute_number = get_attribtue_number(int(ref_from.attrib['connection']))
 
-	from_attribute_number = get_attribtue_number(int(ref_from.attrib['connection']))
+    tables[ref_to.attrib['to']]['referenced_by'].append({
+        'table_id': ref_from.attrib['to'],
+        'table_name': tables[ref_from.attrib['to']]['name'],
+        'attribute_name': tables[ref_from.attrib['to']]['attributes'][from_attribute_number]['name'],
+    })
 
-	tables[ref_to.attrib['to']]['referenced_by'].append({
-		'table_id': ref_from.attrib['to'],
-		'table_name': tables[ref_from.attrib['to']]['name'],
-		'attribute_name': tables[ref_from.attrib['to']]['attributes'][from_attribute_number]['name'],
-	})
+    to_attribute_number = get_attribtue_number(int(ref_from.attrib['connection']))
 
-	to_attribute_number = get_attribtue_number(int(ref_from.attrib['connection']))
-
-	tables[ref_from.attrib['to']]['attributes'][to_attribute_number]['referenced_table'] = {
-		'table_name': tables[ref_to.attrib['to']]['name'],
-		'table_id': tables[ref_to.attrib['to']]['id'],
-	}
+    tables[ref_from.attrib['to']]['attributes'][to_attribute_number]['referenced_table'] = {
+        'table_name': tables[ref_to.attrib['to']]['name'],
+        'table_id': tables[ref_to.attrib['to']]['id'],
+    }
 
 print '% ' + render_root.find('{ns}layer'.format(ns=nsUrl)).attrib['name']
 print ''
@@ -151,3 +150,6 @@ for key, table in sorted(tables.iteritems(), key=lambda (key,val): (val['name'],
 			print '* [{name}](#{id})'.format(name=reference['table_name']+'.'+reference['attribute_name'], \
 											id=reference['table_id']+reference['attribute_name'])
 			print ''
+
+# vim:set sw=4 ts=4 et:
+# -*- coding: utf-8 -*-
