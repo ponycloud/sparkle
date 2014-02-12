@@ -80,7 +80,7 @@ class Placement(object):
         """
 
         # Get disks configured for the given storage pool.
-        disks = self.manager.model['disk'].list(storage_pool=pool_uuid)
+        disks = self.manager.model['disk'].list(storage_pool=pool_id)
         disks = set([d.pkey for d in disks])
 
         # Get disks actually present on a given host.
@@ -104,27 +104,37 @@ class Placement(object):
             disk = ('disk', new.current['disk'])
             self.manager.bestow(host, disk, new)
 
-            # Check for possible storage pool placement.
-            pool_id = self.manager.model['disk'][disk[1]].desired['storage_pool']
-            self.maybe_bestow_storage_pool(host, pool_id)
-        else:
+            # Find storage pool for this host disk.
+            disk_row = self.manager.model['disk'].get(disk[1])
+            pool = disk_row and disk_row.desired['storage_pool']
+
+            # We might have enough disks now, try place the pool.
+            if pool:
+                self.maybe_bestow_storage_pool(host, pool)
+
+        elif old.current:
             host = old.current['host']
             disk = ('disk', old.current['disk'])
             self.manager.withdraw(host, disk, old)
 
-            # Withdraw the disk on a related host.
-            pool_id = self.manager.model['disk'][disk[1]].desired['storage_pool']
-            # Let's withdraw the storage pool since it's not complete.
-            self.manager.withdraw(host, ('storage_pool', pool_id), ('host', host))
+            # Find storage pool for this host disk.
+            disk_row = self.manager.model['disk'].get(disk[1])
+            pool = disk_row and disk_row.desired['storage_pool']
+
+            # Withdraw the storage pool since it's definitely not complete.
+            if pool:
+                pool = ('storage_pool', pool)
+                host = ('host', host)
+                self.manager.withdraw(host, pool, host)
 
 
-    def lookup_sp_hosts(self, pool_id):
+    def lookup_sp_hosts(self, pool):
         """
         Looks up hosts that can see any disk from the given storage pool.
         """
-        host_disks = self.manager.model['host_disk'].list(storage_pool=pool_id)
-        hosts = [hd.current['host'] for hd in host_disks]
-        return set(hosts)
+
+        hds = self.manager.model['host_disk'].list(storage_pool=pool)
+        return set([hd.current['host'] for hd in hds])
 
 
     def on_storage_pool_changed(self, old, new):
@@ -134,12 +144,10 @@ class Placement(object):
 
         # Lookup the hosts we're going to notify and check their eligibility.
         if new.desired:
-            hosts = self.lookup_sp_hosts(new.pkey)
-            for host in hosts:
+            for host in self.lookup_sp_hosts(new.pkey):
                 self.maybe_bestow_storage_pool(host, new.pkey)
-        else:
-            hosts = self.lookup_sp_hosts(old.pkey)
-            for host in hosts:
+        elif old.desired:
+            for host in self.lookup_sp_hosts(old.pkey):
                 self.manager.withdraw(host, old, ('host', host))
 
 
