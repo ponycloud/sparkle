@@ -29,6 +29,7 @@ class Endpoint(object):
         self.filter = mount.get('filter', {})
         self.parent = None
         self.children = {}
+        self.name = path[-1]
 
     @property
     def public(self):
@@ -41,6 +42,44 @@ class Endpoint(object):
                          for name, child in self.children.iteritems() \
                          if child.access not in ('private',)}
         }
+
+    @property
+    def path(self):
+        """
+        Return list of endpoints in the path up to this one.
+        """
+
+        path = []
+        ep = self
+
+        while ep.table:
+            path.insert(0, ep)
+            ep = ep.parent
+
+        return path
+
+    def to_jpath(self, keys):
+        """
+        Convert endpoint to path into the abstract JSON document.
+        """
+
+        jpath = []
+        covered = set()
+        for ep in self.path:
+            jpath.append(ep.name)
+
+            if isinstance(ep.table.pkey, basestring):
+                jpath.append(keys.get(ep.table.name))
+            else:
+                for key in ep.table.pkey:
+                    if key not in covered:
+                        jpath.append(keys.get(key))
+                        break
+
+            jpath.append('children')
+            covered.add(ep.table.name)
+
+        return jpath
 
 
 class Table(object):

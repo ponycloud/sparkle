@@ -176,7 +176,7 @@ def make_sparkle_app(manager):
         @app.require_credentials(manager)
         @convert_errors
         def collection_handler(credentials={}, **keys):
-            jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-2]
+            jpath = endpoint.to_jpath(keys)[:-2]
             cache = {}
 
             if 'GET' == flask.request.method:
@@ -206,7 +206,7 @@ def make_sparkle_app(manager):
         @app.require_credentials(manager)
         @convert_errors
         def entity_handler(credentials={}, **keys):
-            jpath = reduce(add, [[t, keys.get(t), 'children'] for t in path])[:-1]
+            jpath = endpoint.to_jpath(keys)[:-1]
             cache = {}
 
             if 'GET' == flask.request.method:
