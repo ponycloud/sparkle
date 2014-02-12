@@ -188,6 +188,7 @@ def make_sparkle_app(manager):
 
             if 'POST' == flask.request.method:
                 data = loads(flask.request.data)
+
                 if 'desired' in data:
                     pkey = data['desired'].get(endpoint.table.pkey, 'POST')
                 else:
@@ -236,10 +237,18 @@ def make_sparkle_app(manager):
 
         collection_handler, entity_handler = make_handlers(path)
 
-        methods = ['GET', 'DELETE', 'PATCH']
+        if endpoint.table.virtual:
+            methods = ['GET']
+        else:
+            methods = ['GET', 'DELETE', 'PATCH']
+
         app.route_json(rule, methods=methods)(entity_handler)
 
-        methods = ['GET', 'POST', 'PATCH']
+        if endpoint.table.virtual:
+            methods = ['GET']
+        else:
+            methods = ['GET', 'POST', 'PATCH']
+
         app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
 
     # Top-level endpoint for capabilitites reporting.
