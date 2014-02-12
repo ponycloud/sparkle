@@ -104,17 +104,31 @@ class Model(dict):
             name = endpoint.table.name
             pkey = endpoint.table.pkey
 
-            if endpoint.parent.table is None:
-                filter = dict(endpoint.filter)
+            # Start with filter taken from schema.
+            filter = dict(endpoint.filter)
+
+            if isinstance(pkey, basestring):
+                # Ensure we have the key matching our table name if this
+                # table uses a simple single-column primary key.
                 filter.update({pkey: keys[name]})
             else:
-                pname = endpoint.parent.table.name
-                filter = dict(endpoint.filter)
-                filter.update({
-                    pkey: keys[name],
-                    pname: keys[pname],
-                })
+                # Ensure all columns for composite primary key are matched.
+                for subkey in pkey:
+                    filter.update({subkey: keys[subkey]})
 
+            # We may have a parent relation to filter by, too.
+            if endpoint.parent.table:
+                pname = endpoint.parent.table.name
+                ppkey = endpoint.parent.table.pkey
+
+                # Filter according to parent relation.
+                if isinstance(ppkey, basestring):
+                    filter.update({pname: keys[pname]})
+                else:
+                    for subkey in ppkey:
+                        filter.update({subkey: keys[subkey]})
+
+            # Obtain the matching row or raise an error.
             row = self[name].one(**filter)
 
         return row
