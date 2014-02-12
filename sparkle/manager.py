@@ -175,9 +175,9 @@ class Manager(object):
         if isinstance(owner, Row):
             owner = (owner.table.name, owner.pkey)
 
-        print 'bestow %r to %s for %r' % (row, host.uuid, owner)
-
         hosts = self.rows.setdefault(row, set())
+        if host.uuid not in hosts:
+            print 'bestow %r to %s for %r' % (row, host.uuid, owner)
         hosts.add(host.uuid)
 
         owners = host.desired_state.setdefault(row, set())
@@ -208,9 +208,9 @@ class Manager(object):
         if isinstance(owner, Row):
             owner = (owner.table.name, owner.pkey)
 
-        print 'withdraw %r from %s for %r' % (row, host.uuid, owner)
-
         owners = host.desired_state.setdefault(row, set())
+        if owner in owners:
+            print 'withdraw %r from %s for %r' % (row, host.uuid, owner)
         owners.discard(owner)
 
         if 0 == len(owners):
@@ -245,7 +245,15 @@ class Manager(object):
             filter.update({pname: keys[pname]})
             rows = self.model[endpoint.table.name].list(**filter)
 
-        return {row.pkey: row.to_dict() for row in rows}
+        if isinstance(schema.tables[endpoint.table.name].pkey, basestring):
+            # Return rows keyed by the primary key.
+            return {row.pkey: row.to_dict() for row in rows}
+        else:
+            # Return rows keyed by the missing portion of composite
+            # primary key.
+            for key in schema.tables[endpoint.table.name].pkey:
+                if key not in keys:
+                    return {row.get(key): row.to_dict() for row in rows}
 
 
     def get_entity(self, path, keys):
