@@ -12,8 +12,12 @@ items:
           pattern: ^test$
         path:
           &Path
-            type: string
-            format: ^/([^~]+|~[01])*$
+            oneOf:
+              - type: string
+                format: ^/([^~]+|~[01])*$
+              - type: array
+                items:
+                  type: string
         value: &Value {}
 
     - type: object
@@ -64,4 +68,14 @@ items:
           pattern: ^copy$
         path: *Path
         from: *Path
+
+    - type: object
+      additionalProperties: false
+      required: [op, path, value]
+      properties:
+        op:
+          type: string
+          pattern: ^x-merge$
+        path: *Path
+        value: *Value
 

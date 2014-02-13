@@ -29,7 +29,8 @@ from sparkle.util import call_sync
 from sparkle.schema import schema
 from sparkle.rest import Flaskful
 from sparkle.auth import sign_token
-from sparkle.patch import validate_patch, apply_patch, split
+from sparkle.validate import validate_json_patch
+from sparkle.patch import apply_patch, split
 from sparkle.dbdict import validate_dbdict_fragment, make_schema, \
                            preprocess_dbdict_patch, Children
 
@@ -158,7 +159,7 @@ def make_sparkle_app(manager):
             """PATCH handler for both collection and entity endpoints."""
 
             patch = loads(flask.request.data)
-            validate_patch(patch)
+            validate_json_patch(patch)
 
             for op in patch:
                 write = ('TEST' != op['op'])

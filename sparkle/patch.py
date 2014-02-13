@@ -15,18 +15,10 @@ another reference to original data.  That, however, does not mean that the
 target won't copy the referenced value when receiving it.
 """
 
-__all__ = ['Pointer', 'apply_patch', 'validate_patch', 'split']
+__all__ = ['Pointer', 'apply_patch', 'split']
 
-
-import jsonschema
-import os.path
-import yaml
 
 from collections import Iterable, Mapping, MutableMapping
-
-
-with open(os.path.dirname(__file__) + '/patch.schema.yaml') as fp:
-        patch_schema = yaml.load(fp)
 
 
 def unescape(part):
@@ -133,17 +125,10 @@ class Pointer(object):
             self.add(value)
 
 
-def validate_patch(operations):
-    """Validate JSON Patch against a schema."""
-    jsonschema.validate(operations, patch_schema)
-
-
 def apply_patch(document, operations):
     """
     Apply sequence of JSON Patch operations to a document.
     The document is always modified in-place.
-
-    Use validate_patch() to make sure the patch makes sense.
 
     :param document:    JSON-like value to operate on.
     :param operations:  Sequence of JSON Patch operations as per RFC 6902.
