@@ -200,7 +200,7 @@ def make_sparkle_app(manager):
                 return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
-                return common_patch(credentials, keys, jpath)
+                return common_patch(credentials, jpath)
 
         @app.require_credentials(manager)
         @convert_errors
@@ -223,7 +223,7 @@ def make_sparkle_app(manager):
                 return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
-                return common_patch(credentials, keys, jpath)
+                return common_patch(credentials, jpath)
 
         collection_handler.__name__ = 'c_' + '_'.join(path)
         entity_handler.__name__     = 'e_' + '_'.join(path)
