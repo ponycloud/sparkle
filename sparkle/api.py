@@ -144,15 +144,8 @@ def make_sparkle_app(manager):
         def convert_errors(fn):
             @wraps(fn)
             def wrapper(*args, **kwargs):
-                try:
-                    return fn(*args, **kwargs)
-                except KeyError, e:
-                    raise NotFound(e.message)
-                except (ValueError, TypeError), e:
-                    raise BadRequest(e.message)
-                except ValidationError, e:
-                    raise BadRequest('invalid document element (%s): %s' \
-                                        % ('/' + '/'.join(e.path), e.cause))
+                # TODO: actually convert the errors
+                return fn(*args, **kwargs)
             return wrapper
 
         def common_patch(credentials, keys, cache, jpath):
