@@ -156,19 +156,46 @@ def make_sparkle_app(manager):
             PATCH handler for both collection and entity endpoints.
             """
 
+            # Read patch from the client.
             patch = loads(flask.request.data)
+
+            # And make sure it really is a patch and not something
+            # totally weird that would blow up later.
             validate_json_patch(patch)
 
+            # Alas, we need to poke into the patch a bit before we allow
+            # it to execute.  Namely, we need to rebase paths and consult
+            # access control rules.
             for op in patch:
-                write = ('test' != op['op'])
-                value = op.get('value', {})
-                op['path'] = prefix + normalize_path(op['path'])
-                validate_dbdict_fragment(creds, value, op['path'], write)
+                if 'path' in op:
+                    # Determine whether this operation is a mutation.
+                    # We have different access rules for reading and writing.
+                    write = ('test' != op['op'])
+
+                    # We default to empty dictionary when no value is given.
+                    # This is however just for access control checks.
+                    value = op.get('value', {})
+
+                    # Adjust the path to include endpoint prefix.
+                    op['path'] = prefix + normalize_path(op['path'])
+
+                    # Validate the value at the path.
+                    validate_dbdict_fragment(creds, value, op['path'], write)
 
                 if 'from' in op:
+                    # Adjust source path the same way as above.
                     op['from'] = prefix + normalize_path(op['from'])
+
+                    # And verify that we can access the source data.
+                    # XXX: This could be very broken as we should validate
+                    #      access to all child entities and not just the root.
                     validate_dbdict_fragment(creds, {}, op['from'], False)
 
+                # Remove None keys from values of non-merge operations.
+                if 'value' in op and 'merge' != op['op']:
+                    op['value'] = remove_nulls(op['value'])
+
+            # Run the patch and hope for the best?
             return {'uuids': apply_patch(patch)}
 
         @app.require_credentials(manager)
@@ -177,26 +204,47 @@ def make_sparkle_app(manager):
             jpath = endpoint.to_jpath(keys)[:-2]
 
             if 'GET' == flask.request.method:
+                # Make sure all access control restrictions are applied.
                 validate_dbdict_fragment(credentials, {}, jpath, False)
 
                 try:
+                    # Let the manager deal with model access and data
+                    # retrieval.  XXX: Access control is broken there, BTW.
                     data = call_sync(manager.list_collection, path, keys)
                 except KeyError:
                     raise PathError('not found', jpath)
 
+                # We promised not to return any nulls in the output.
                 return remove_nulls(data)
 
             if 'POST' == flask.request.method:
+                # Read data from client.
                 data = loads(flask.request.data)
 
+                # Make sure it's at least a litle sane.
+                if not isinstance(data, Mapping):
+                    raise DataError('invalid entity', jpath)
+
                 if 'desired' in data:
+                    # Extract the primary key placeholder.
                     pkey = data['desired'].get(endpoint.table.pkey, 'POST')
                 else:
+                    # Or default to one named 'POST'.
                     pkey = 'POST'
 
+                # Get rid of keys with None values.
+                data = remove_nulls(data)
+
+                # Calculate hypothetical destination path.
                 post_path = jpath + [pkey]
+
+                # Make sure all access control restrictions are applied.
                 validate_dbdict_fragment(credentials, data, post_path, True)
+
+                # This is what the patch should look like:
                 patch = [{'op': 'add', 'path': post_path, 'value': data}]
+
+                # Apply the patch and return resulting set of UUIDs.
                 return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
@@ -208,23 +256,32 @@ def make_sparkle_app(manager):
             jpath = endpoint.to_jpath(keys)[:-1]
 
             if 'GET' == flask.request.method:
+                # Make sure that we can access the entity.
                 validate_dbdict_fragment(credentials, {}, jpath, False)
 
                 try:
+                    # Get data from manager who can access the model.
                     data = call_sync(manager.get_entity, path, keys)
                 except KeyError:
                     raise PathError('not found', jpath)
 
+                # Strip keys with None values.
                 return remove_nulls(data)
 
             if 'DELETE' == flask.request.method:
+                # Make sure that we can write to that entity.
                 validate_dbdict_fragment(credentials, {}, jpath, True)
+
+                # Construct patch that would remove it.
                 patch = [{'op': 'remove', 'path': jpath}]
+
+                # Execute as usual.
                 return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
                 return common_patch(credentials, jpath)
 
+        # Rename handlers to satisfy Flask.
         collection_handler.__name__ = 'c_' + '_'.join(path)
         entity_handler.__name__     = 'e_' + '_'.join(path)
 
@@ -232,8 +289,10 @@ def make_sparkle_app(manager):
 
     # Generate entity and collection endpoints.
     for path, endpoint in schema.endpoints.iteritems():
+        # Convert list path to a string suitable for Flask routing.
         rule = path_to_rule(path)
 
+        # Prepare entity and collection handlers from schema.
         collection_handler, entity_handler = make_handlers(path)
 
         if endpoint.table.virtual:
