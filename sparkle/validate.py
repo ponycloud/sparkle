@@ -80,8 +80,9 @@ def validate_dbdict(creds, data, write):
 
         auth_entity(ep, path)
 
-        if write and not 'desired' in data:
-            raise DataError('missing desired state', path + ['desired'])
+        for key in data:
+            if key not in ('desired', 'children'):
+                raise DataError('invalid property', path + [key])
 
         if 'desired' in data:
             check_desired(data['desired'], ep, path + ['desired'])

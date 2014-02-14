@@ -346,7 +346,7 @@ class Collection(DbDict):
     def add(self, key, value):
         """Insert new entity to the collection."""
 
-        desired = dict(value['desired'])
+        desired = dict(value.get('desired', {}))
         pkey = self.schema.table.pkey
 
         if pkey in desired and desired[pkey] != key:
