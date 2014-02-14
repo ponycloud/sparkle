@@ -35,24 +35,6 @@ contain children matched by the parent relation.
 """
 
 
-def validate_dbdict_fragment(jschema, fragment, path=[]):
-    """
-    Wrap selected fragment with several dicts representing the path
-    leading to it and then validate it according to given dbdict schema.
-
-    :param jschema:   JSON schema to use for validation.  Use make_schema().
-    :param fragment:  The document fragment such as {'uuid': '...', 'foo': 1}.
-    :param path:      List of path components such as ['host', 'xy', 'desired'].
-
-    Raise a validation exception if the fragment does not match the schema.
-    """
-
-    for part in reversed(path):
-        fragment = {part: fragment}
-
-    jsonschema.validate(fragment, jschema)
-
-
 def is_uuid(uuid):
     if not isinstance(uuid, basestring):
         return False
@@ -281,8 +263,7 @@ class Children(DbDict):
         """Retrieve child Collection proxy."""
 
         if key not in self:
-            raise KeyError('%s not a child of %s' \
-                                % (key, self.schema.table.name))
+            raise KeyError(key)
 
         return Collection(self.db, self.schema.children[key], self.pkey)
 
@@ -327,21 +308,19 @@ class Collection(DbDict):
             # Load the child entity for additional checking.
             child = getattr(self.db, self.schema.table.name).get(key)
         except UnmappedInstanceError:
-            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
+            raise KeyError(key)
 
         # Verify that all filters are met.
         for field, value in self.schema.filter.iteritems():
             if getattr(child, field) != value:
-                raise KeyError('%s/%s not found' \
-                                    % (self.schema.table.name, key))
+                raise KeyError(key)
 
         # If not at the root, verify that this entity belongs to
         # parent it have been loaded from.
         if self.schema.parent.table is not None:
             fkey = self.schema.parent.table.name
             if getattr(child, fkey) != self.pkey:
-                raise KeyError('%s/%s not found' \
-                                    % (self.schema.table.name, key))
+                raise KeyError(key)
 
         # The entity provably belongs to this parent, return it.
         return Entity(self.db, self.schema, key)
@@ -371,9 +350,7 @@ class Collection(DbDict):
         pkey = self.schema.table.pkey
 
         if pkey in desired and desired[pkey] != key:
-            raise KeyError('%s/%s/desired/%s (%s) does not match' \
-                                % (self.schema.table.name,
-                                   key, pkey, desired[pkey]))
+            raise ValueError('mismatched primary key')
 
         desired[pkey] = key
 
@@ -382,9 +359,7 @@ class Collection(DbDict):
             parent_pkey = desired.setdefault(fkey, self.pkey)
 
             if parent_pkey != self.pkey:
-                raise ValueError('cannot add %s/%s with invalid parent %s' \
-                                    % (self.schema.table.name,
-                                       key, parent_pkey))
+                raise ValueError('invalid parent')
 
         getattr(self.db, self.schema.table.name).insert(**desired)
         self.db.flush()
@@ -398,13 +373,13 @@ class Collection(DbDict):
         """Delete child entity by it's primary key."""
 
         if key not in self:
-            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
+            raise KeyError(key)
 
         try:
             self.db.delete(getattr(self.db, self.schema.table.name).get(key))
             self.db.flush()
         except UnmappedInstanceError:
-            raise KeyError('%s/%s not found' % (self.schema.table.name, key))
+            raise KeyError(key)
 
     @staticmethod
     def preprocess(fragment, uuids, cschema, safe):
@@ -449,24 +424,19 @@ class Entity(DbDict):
         try:
             return self.data[key]
         except KeyError:
-            raise KeyError('%s/%s/%s not found' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
     def __delitem__(self, key):
         if key not in self.data:
-            raise KeyError('%s/%s/%s not found' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
-        raise TypeError('cannot remove %s/%s/%s' \
-                            % (self.schema.table.name, self.pkey, key))
+        raise TypeError('immutable field')
 
     def add(self, key, value):
         if key in self.data:
-            raise KeyError('%s/%s/%s already exists' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
-        raise TypeError('%s/%s/%s cannot exist' \
-                            % (self.schema.table.name, self.pkey, key))
+        raise TypeError('immutable field')
 
     @staticmethod
     def preprocess(fragment, uuids, eschema, safe):
@@ -515,8 +485,7 @@ class Desired(DbDict):
         # When the result is non-None the key still might be something
         # unexpected such as a builtin method.  So check key validity too.
         if value is None or key not in self:
-            raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
         return value
 
@@ -528,18 +497,15 @@ class Desired(DbDict):
         """
 
         if key == self.schema.table.pkey:
-            raise TypeError('%s/%s/desired/%s is immutable primary key' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise TypeError('immutable primary key')
 
         entity = self.get_soup_entity()
 
         if getattr(entity, key, None) is None or key not in self:
-            raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
         if self.schema.parent.table and key == self.schema.parent.table.name:
-            raise KeyError('%s/%s/desired/%s is immutable' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
         setattr(entity, key, None)
         self.db.flush()
@@ -548,12 +514,10 @@ class Desired(DbDict):
         """Set previously NULL field."""
 
         if key in self:
-            raise KeyError('%s/%s/desired/%s already exists' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise ValueError('already exists')
 
         if self.schema.parent.table and key == self.schema.parent.table.name:
-            raise KeyError('%s/%s/desired/%s is immutable' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise TypeError('immutable field')
 
         entity = self.get_soup_entity()
         setattr(entity, key, value)
@@ -563,16 +527,13 @@ class Desired(DbDict):
         """Change value of an existing field."""
 
         if value is None:
-            raise ValueError('%s/%s/desired/%s cannot be null' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise ValueError('cannot be null')
 
         if key not in self:
-            raise KeyError('%s/%s/desired/%s not found' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise KeyError(key)
 
         if self.schema.parent.table and key == self.schema.parent.table.name:
-            raise KeyError('%s/%s/desired/%s is immutable' \
-                                % (self.schema.table.name, self.pkey, key))
+            raise ValueError('immutable field')
 
         entity = self.get_soup_entity()
         setattr(entity, key, value)

@@ -25,14 +25,14 @@ from operator import add
 from time import time
 from collections import Mapping
 
+from sparkle.common import *
 from sparkle.util import call_sync
 from sparkle.schema import schema
-from sparkle.rest import Flaskful
+from sparkle.rest import Flaskful, json_response
 from sparkle.auth import sign_token
-from sparkle.validate import validate_json_patch
-from sparkle.patch import apply_patch, split
-from sparkle.dbdict import validate_dbdict_fragment, make_schema, \
-                           preprocess_dbdict_patch, Children
+from sparkle.validate import validate_json_patch, validate_dbdict_fragment
+from sparkle.patch import Pointer, normalize_path
+from sparkle.dbdict import preprocess_dbdict_patch, Children
 
 import flask
 
@@ -67,6 +67,7 @@ def path_to_rule(path):
 
     return '/v1' + '/'.join(fullpath)
 
+
 def remove_nulls(data):
     """Recursively remove None values from dictionary."""
 
@@ -75,14 +76,20 @@ def remove_nulls(data):
 
     return {k: remove_nulls(v) for k, v in data.iteritems() if v is not None}
 
-def make_json_schema(cache, credentials, write=True):
-        """Prepare schema for specified conditions."""
 
-        key = (tuple(sorted(credentials.iteritems())), write)
-        if key in cache:
-            return cache[key]
+def convert_errors(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ConflictError, e:
+            return json_response(e.json, e.status)
+        except PathError, e:
+            return json_response(e.json, e.status)
+        except UserError, e:
+            return json_response(e.json, e.status)
 
-        return cache.setdefault(key, make_schema(credentials, write))
+    return wrapper
 
 
 def make_sparkle_app(manager):
@@ -91,7 +98,7 @@ def make_sparkle_app(manager):
     app = Flaskful(__name__)
     app.debug = True
 
-    def apply_valid_patch(patch):
+    def apply_patch(patch):
         """
         Preprocess and apply validated JSON Patch to database.
         Returns dictionary with placeholder to uuid mappings.
@@ -102,8 +109,11 @@ def make_sparkle_app(manager):
             # Returns mapped placeholders for client to orient himself.
             uuids = preprocess_dbdict_patch(patch)
 
-            # Apply patch to the database.
-            apply_patch(Children(manager.db, schema.root), patch)
+            # Get root of the database dictionary mapping.
+            root = Pointer(Children(manager.db, schema.root))
+
+            # Apply the patch.
+            root.patch(patch)
 
             # Determine our transaction id.
             txid = int(manager.db.execute('SELECT cork();').fetchone()[0])
@@ -141,43 +151,39 @@ def make_sparkle_app(manager):
     def make_handlers(path):
         endpoint = schema.resolve_path(path)
 
-        def convert_errors(fn):
-            @wraps(fn)
-            def wrapper(*args, **kwargs):
-                # TODO: actually convert the errors
-                return fn(*args, **kwargs)
-            return wrapper
-
-        def common_patch(credentials, keys, cache, jpath):
-            """PATCH handler for both collection and entity endpoints."""
+        def common_patch(creds, prefix):
+            """
+            PATCH handler for both collection and entity endpoints.
+            """
 
             patch = loads(flask.request.data)
             validate_json_patch(patch)
 
             for op in patch:
-                write = ('TEST' != op['op'])
-                jschema = make_json_schema(cache, credentials, write)
-                op['path'] = jpath + split(op['path'])
-                validate_dbdict_fragment(jschema, op.get('value', {}), op['path'])
+                write = ('test' != op['op'])
+                value = op.get('value', {})
+                op['path'] = prefix + normalize_path(op['path'])
+                validate_dbdict_fragment(creds, value, op['path'], write)
 
                 if 'from' in op:
-                    jschema = make_json_schema(cache, credentials, False)
-                    op['from'] = jpath + split(op['from'])
-                    validate_dbdict_fragment(jschema, {}, op['from'])
+                    op['from'] = prefix + normalize_path(op['from'])
+                    validate_dbdict_fragment(creds, {}, op['from'], False)
 
-            return {'uuids': apply_valid_patch(patch)}
+            return {'uuids': apply_patch(patch)}
 
         @app.require_credentials(manager)
         @convert_errors
         def collection_handler(credentials={}, **keys):
             jpath = endpoint.to_jpath(keys)[:-2]
-            cache = {}
 
             if 'GET' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, False)
-                validate_dbdict_fragment(jschema, {}, jpath)
+                validate_dbdict_fragment(credentials, {}, jpath, False)
 
-                data = call_sync(manager.list_collection, path, keys)
+                try:
+                    data = call_sync(manager.list_collection, path, keys)
+                except KeyError:
+                    raise PathError('not found', jpath)
+
                 return remove_nulls(data)
 
             if 'POST' == flask.request.method:
@@ -189,36 +195,35 @@ def make_sparkle_app(manager):
                     pkey = 'POST'
 
                 post_path = jpath + [pkey]
-                jschema = make_json_schema(cache, credentials, True)
-                validate_dbdict_fragment(jschema, data, post_path)
+                validate_dbdict_fragment(credentials, data, post_path, True)
                 patch = [{'op': 'add', 'path': post_path, 'value': data}]
-                return {'uuids': apply_valid_patch(patch)}
+                return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
-                return common_patch(credentials, keys, cache, jpath)
+                return common_patch(credentials, keys, jpath)
 
         @app.require_credentials(manager)
         @convert_errors
         def entity_handler(credentials={}, **keys):
             jpath = endpoint.to_jpath(keys)[:-1]
-            cache = {}
 
             if 'GET' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, False)
-                validate_dbdict_fragment(jschema, {}, jpath)
+                validate_dbdict_fragment(credentials, {}, jpath, False)
 
-                data = call_sync(manager.get_entity, path, keys)
+                try:
+                    data = call_sync(manager.get_entity, path, keys)
+                except KeyError:
+                    raise PathError('not found', jpath)
+
                 return remove_nulls(data)
 
             if 'DELETE' == flask.request.method:
-                jschema = make_json_schema(cache, credentials, True)
-                validate_dbdict_fragment(jschema, {}, jpath)
-
+                validate_dbdict_fragment(credentials, {}, jpath, True)
                 patch = [{'op': 'remove', 'path': jpath}]
-                return {'uuids': apply_valid_patch(patch)}
+                return {'uuids': apply_patch(patch)}
 
             if 'PATCH' == flask.request.method:
-                return common_patch(credentials, keys, cache, jpath)
+                return common_patch(credentials, keys, jpath)
 
         collection_handler.__name__ = 'c_' + '_'.join(path)
         entity_handler.__name__     = 'e_' + '_'.join(path)

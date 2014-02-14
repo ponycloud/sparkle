@@ -15,8 +15,10 @@ another reference to original data.  That, however, does not mean that the
 target won't copy the referenced value when receiving it.
 """
 
-__all__ = ['Pointer', 'apply_patch', 'split']
+__all__ = ['Pointer', 'normalize_path']
 
+
+from sparkle.common import *
 
 from collections import Iterable, Mapping, MutableMapping
 
@@ -27,83 +29,129 @@ def unescape(part):
     return part
 
 
-def split(path):
-    if '/' != path[:1]:
-        raise ValueError('invalid path %r' % (path,))
-    return [unescape(part) for part in path.split('/')[1:]]
+def normalize_path(path):
+    """
+    Normalize string or list path to the list path.
+    """
 
+    if isinstance(path, list):
+        return path
 
-def cast_part(document, part):
-    if isinstance(document, Mapping):
-        return part
-    elif isinstance(document, basestring):
-        raise KeyError('path (%r) points into scalar (%r)' % (part, document))
-    elif isinstance(document, Iterable):
-        if '-' == part:
-            return len(document)
-        else:
-            return int(part)
-    else:
-        raise KeyError('path (%r) points into scalar (%r)' % (part, document))
+    if isinstance(path, basestring):
+        if '/' != path[:1]:
+            raise DataError('path missing the leading /', path)
+        return [unescape(part) for part in path.split('/')][1:]
+
+    raise DataError('invalid path', path)
 
 
 class Pointer(object):
     """Pointer to a document fragment."""
 
-    def __init__(self, document, path=[]):
-        self.path = []
-        self.target = {'': document}
+    def __init__(self, parent, path=[]):
+        """
+        Prepare pointer to an element of given parent.
+        Path is mostly informative, only the last element is used.
+        """
 
-        if isinstance(path, basestring):
-            parts = [''] + split(path)
-        else:
-            parts = [''] + path
+        assert isinstance(parent, MutableMapping), \
+               'parent must be a MutableMapping'
 
-        for part in parts[:-1]:
-            part = cast_part(self.target, part)
-            self.target = self.target[part]
-            self.path.append(part)
+        self.parent = parent
+        self.path = path
 
-        part = cast_part(self.target, parts[-1])
-        self.path.append(part)
-        self.path.pop(0)
 
-        self.key = part
+    @property
+    def key(self):
+        """
+        Last element of the internal path for convenience.
+        Will fail if the path is of zero length.
+        """
+
+        if not self.path:
+            raise DataError('cannot operate on the absolute root', self.path)
+
+        return self.path[-1]
+
+
+    def relative(self, path):
+        """
+        Return Pointer to child element using given path.
+        """
+
+        path = normalize_path(path)
+        parent = self.parent
+        sofar = self.path[:-1]
+
+        for elem in (self.path[-1:] + path)[:-1]:
+            sofar.append(elem)
+
+            try:
+                parent = parent[elem]
+            except KeyError:
+                raise PathError('not found', sofar)
+
+        return Pointer(parent, self.path + path)
+
 
     def get(self):
-        """Retrieve the pointed-to value."""
-        return self.target[self.key]
+        """
+        Retrieve the pointed-to value.
+        """
+
+        try:
+            return self.parent[self.key]
+        except KeyError:
+            raise PathError('not found', self.path)
+
 
     def remove(self):
-        """Remove the pointed-to value."""
-        if 0 == len(self.path):
-            raise TypeError('cannot remove root')
-        del self.target[self.key]
+        """
+        Remove the pointed-to value.
+        """
+
+        try:
+            del self.parent[self.key]
+        except KeyError:
+            raise PathError('not found', self.path)
+        except (ValueError, TypeError), e:
+            raise DataError(e.message, self.path)
+
 
     def add(self, value):
-        """Add value at the pointed-to location."""
+        """
+        Add value at the pointed-to location.
+        """
 
-        if 0 == len(self.path):
-            raise TypeError('root already exists')
-
-        if isinstance(self.target, Mapping):
-            if hasattr(self.target, 'add'):
-                self.target.add(self.key, value)
-            elif self.key in self.target:
-                raise KeyError('key %r already exists' % self.key)
+        try:
+            if hasattr(self.parent, 'add'):
+                self.parent.add(self.key, value)
+            elif self.key in self.parent:
+                raise DataError('path already exists', self.path)
             else:
-                self.target[self.key] = value
-        else:
-            self.target.insert(self.key, value)
+                self.parent[self.key] = value
+        except KeyError:
+            raise PathError('not found', self.path)
+        except (ValueError, TypeError), e:
+            raise DataError(e.message, self.path)
+
 
     def replace(self, value):
-        """Replace the value at the pointed-to location."""
+        """
+        Replace the value at the pointed-to location.
+        """
 
-        if hasattr(self.target, 'replace'):
-            self.target.replace(self.key, value)
+        if hasattr(self.parent, 'replace'):
+            try:
+                self.parent.replace(self.key, value)
+            except KeyError:
+                raise PathError('not found', self.path)
+            except (ValueError, TypeError), e:
+                raise DataError(e.message, self.path)
         else:
             self.remove()
             self.add(value)
+
 
     def cut(self):
         """
@@ -111,60 +159,70 @@ class Pointer(object):
         The extracted value must be pasted elsewhere.
         """
 
-        if hasattr(self.target, 'cut'):
-            self.target.cut(self.key)
+        if hasattr(self.parent, 'cut'):
+            try:
+                self.parent.cut(self.key)
+            except KeyError:
+                raise PathError('not found', self.path)
+            except (ValueError, TypeError), e:
+                raise DataError(e.message, self.path)
         else:
             self.remove()
 
-    def paste(self, value):
-        """Paste value previously extracted using the cut function."""
 
-        if hasattr(self.target, 'paste'):
-            self.target.paste(self.key, value)
+    def paste(self, value):
+        """
+        Paste value previously extracted using the cut function.
+        """
+
+        if hasattr(self.parent, 'paste'):
+            try:
+                self.parent.paste(self.key, value)
+            except KeyError:
+                raise PathError('not found', self.path)
+            except (ValueError, TypeError), e:
+                raise DataError(e.message, self.path)
         else:
             self.add(value)
 
 
-def apply_patch(document, operations):
-    """
-    Apply sequence of JSON Patch operations to a document.
-    The document is always modified in-place.
+    def patch(self, ops):
+        """
+        Apply a complete patch with paths being relative to the Pointer.
 
-    :param document:    JSON-like value to operate on.
-    :param operations:  Sequence of JSON Patch operations as per RFC 6902.
-    """
+        The patch must be a valid JSON Patch document: no additional error
+        checking is performed.
+        """
 
-    for item in operations:
-        op = item['op']
-        path = item['path']
+        for item in ops:
+            op = item['op']
+            path = item['path']
 
-        ptr = Pointer(document, path)
+            dst = self.relative(path)
 
-        if op in ('test', 'add', 'replace'):
-            value = item['value']
+            if op in ('test', 'add', 'replace'):
+                value = item['value']
 
-        if op in ('move', 'copy'):
-            from_ = item['from']
+            if op in ('move', 'copy'):
+                src = self.relative(item['from'])
 
-            from_ptr = Pointer(document, from_)
+                if len(src.path) < len(dst.path):
+                    if dst.path[:len(src.path)] == src.path:
+                        raise DataError('from is a prefix of path', src.path)
 
-            if len(from_ptr.path) < len(ptr.path):
-                if ptr.path[:len(from_ptr.path)] == from_ptr.path:
-                    raise ValueError('%r is a prefix of %r' % (from_, path))
-
-        if op == 'test':
-            if ptr.get() != value:
-                raise ValueError('value of %r does not match' % (ptr.path,))
-        elif op == 'remove':
-            ptr.remove()
-        elif op == 'add':
-            ptr.add(value)
-        elif op == 'replace':
-            ptr.replace(value)
-        elif op == 'move':
-            ptr.paste(from_ptr.cut())
-        elif op == 'copy':
-            ptr.add(from_ptr.get())
+            if op == 'test':
+                if dst.get() != value:
+                    raise ConflictError('value test failed', dst.path)
+            elif op == 'remove':
+                dst.remove()
+            elif op == 'add':
+                dst.add(value)
+            elif op == 'replace':
+                dst.replace(value)
+            elif op == 'move':
+                dst.paste(src.cut())
+            elif op == 'copy':
+                dst.add(src.get())
 
 
 # vim:set sw=4 ts=4 et:
