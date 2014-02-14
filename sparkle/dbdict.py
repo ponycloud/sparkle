@@ -12,7 +12,6 @@ from uuid import uuid4
 from collections import Mapping, MutableMapping, Sequence, MutableSequence
 
 from sparkle.schema import schema
-from sparkle.patch import Pointer
 
 __doc__ = """
 Database to Dictionary
