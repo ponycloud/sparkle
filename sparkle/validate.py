@@ -64,11 +64,18 @@ def validate_dbdict(creds, data, write):
         if not isinstance(data, Mapping):
             raise DataError('invalid desired state', path)
 
+        for key in data:
+            if not isinstance(key, basestring):
+                raise DataError('invalid field name', path + [key])
+
     def check_children(data, ep, path):
         if not isinstance(data, Mapping):
             raise DataError('invalid children', path)
 
         for key, collection in data.iteritems():
+            if not isinstance(key, basestring):
+                raise DataError('invalid key type', path + [key])
+
             if key not in ep.children:
                 raise DataError('invalid child type', path + [key])
 
@@ -97,6 +104,9 @@ def validate_dbdict(creds, data, write):
         auth_collection(ep, path)
 
         for key, entity in data.iteritems():
+            if not isinstance(key, basestring):
+                raise DataError('invalid key type', path + [key])
+
             check_entity(entity, ep, path + [key])
 
     def auth_collection(ep, path):
