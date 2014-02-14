@@ -32,7 +32,7 @@ class UserError(Exception):
         assert path is None \
             or isinstance(path, basestring) \
             or isinstance(path, list), \
-               'path must be Null, a string or list of strings'
+               'path must be None, a string or list of strings'
 
         if isinstance(path, list):
             path = [unicode(p) for p in path]
