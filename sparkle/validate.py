@@ -42,7 +42,7 @@ def validate_json_patch(data):
     try:
         jsonschema.validate(data, JSON_PATCH_SCHEMA)
     except jsonschema.ValidationError, e:
-        raise DataError('Patch: ' + e.message, e.path)
+        raise DataError('Patch: ' + e.message, list(e.path))
 
 
 def validate_dbdict(creds, data, write):
