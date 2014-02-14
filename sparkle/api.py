@@ -321,7 +321,16 @@ def make_sparkle_app(manager):
     if app.debug:
         @app.route_json('/v1/dump')
         def dump():
-            return call_sync(manager.model.dump)
+            result = {}
+            for tname, pkey, part, state in call_sync(manager.model.dump):
+                if not schema.tables[tname].endpoints:
+                    continue
+
+                table = result.setdefault(tname, {})
+                row = table.setdefault(pkey, {})
+                row[part] = state
+
+            return result
 
     # Ta-dah?
     return app
