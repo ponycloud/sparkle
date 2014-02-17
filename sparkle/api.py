@@ -225,6 +225,22 @@ def make_sparkle_app(manager):
                 if not isinstance(data, Mapping):
                     raise DataError('invalid entity', jpath)
 
+                # Desired state must be present when POSTing.
+                if 'desired' not in data:
+                    raise DataError('desired state missing', jpath + ['desired'])
+
+                # When primary keys must be specified by the user, make sure
+                # that they are present and do not invent them on our own.
+                if endpoint.table.user_pkey:
+                    djpath = jpath + ['desired']
+                    if isinstance(endpoint.table.pkey, basestring):
+                        if endpoint.table.pkey not in data['desired']:
+                            raise DataError('primary key missing', djpath + [endpoint.table.pkey])
+                    else:
+                        for key in endpoint.table.pkey:
+                            if key not in data['desired']:
+                                raise DataError('primary key missing', djpath + [key])
+
                 if 'desired' in data:
                     # Extract the primary key placeholder.
                     pkey = data['desired'].get(endpoint.table.pkey, 'POST')
