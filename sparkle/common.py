@@ -4,7 +4,7 @@
 from __future__ import unicode_literals
 
 __all__ = ['UserError', 'DataError', 'AccessError', 'PathError',
-           'ConflictError']
+           'ConflictError', 'PatchError']
 
 class UserError(Exception):
     """
@@ -91,7 +91,18 @@ class PathError(DataError):
     Should map to Not Found reply to API client.
     """
 
+    name = 'path-not-found'
     status = 404
+
+
+class PatchError(DataError):
+    """
+    Supplied patch is not valid.
+    Should map to Bad Request reply to API client.
+    """
+
+    name = 'invalid-patch'
+    status = 400
 
 
 # vim:set sw=4 ts=4 et:
