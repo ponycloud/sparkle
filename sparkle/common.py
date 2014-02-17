@@ -61,7 +61,7 @@ class AccessError(UserError):
     Should map to Forbidden reply to API client.
     """
 
-    name = 'conflict'
+    name = 'access-denied'
     status = 403
 
 
