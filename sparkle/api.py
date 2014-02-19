@@ -14,14 +14,10 @@ authentication.
 
 __all__ = ['make_sparkle_app']
 
-from twisted.internet import reactor
-from werkzeug.exceptions import BadRequest, InternalServerError, NotFound, \
-                                Unauthorized
-from jsonschema import ValidationError
+from werkzeug.exceptions import NotFound, Unauthorized
 from simplejson import loads, dumps
 from functools import wraps
 from os.path import dirname
-from operator import add
 from time import time
 from collections import Mapping
 
