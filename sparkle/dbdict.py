@@ -4,12 +4,11 @@
 from __future__ import unicode_literals
 
 import re
-import jsonschema
 
+from collections import Mapping, MutableMapping, Sequence, MutableSequence
 from sqlalchemy.orm.exc import UnmappedInstanceError
 from pprint import pformat
 from uuid import uuid4
-from collections import Mapping, MutableMapping, Sequence, MutableSequence
 
 from sparkle.schema import schema
 
