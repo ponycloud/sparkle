@@ -14,6 +14,7 @@ authentication.
 
 __all__ = ['make_sparkle_app']
 
+from sqlalchemy.exc import DatabaseError
 from werkzeug.exceptions import NotFound, Unauthorized
 from simplejson import loads, dumps
 from functools import wraps
@@ -118,8 +119,12 @@ def make_sparkle_app(manager):
             call_sync(manager.listener.register, txid)
 
             try:
-                # Attempt to commit the transaction.
-                manager.db.commit()
+                try:
+                    # Attempt to commit the transaction.
+                    manager.db.commit()
+                except DatabaseError, e:
+                    # We have nothing better for now.
+                    raise DataError(e.orig.diag.message_primary, [])
             except:
                 # Transaction failed, remove the completion watch.
                 call_sync(manager.listener.abort, txid)

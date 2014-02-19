@@ -21,7 +21,7 @@ __all__ = ['Pointer', 'normalize_path']
 from sparkle.common import *
 
 from collections import Iterable, Mapping, MutableMapping
-
+from sqlalchemy.exc import DatabaseError
 
 def unescape(part):
     part = part.replace('~1', '/')
@@ -116,6 +116,8 @@ class Pointer(object):
             raise PathError('not found', self.path)
         except (ValueError, TypeError), e:
             raise DataError(e.message, self.path)
+        except DatabaseError, e:
+            raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
 
 
     def add(self, value):
@@ -134,6 +136,8 @@ class Pointer(object):
             raise PathError('not found', self.path)
         except (ValueError, TypeError), e:
             raise DataError(e.message, self.path)
+        except DatabaseError, e:
+            raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
 
 
     def replace(self, value):
@@ -148,6 +152,8 @@ class Pointer(object):
                 raise PathError('not found', self.path)
             except (ValueError, TypeError), e:
                 raise DataError(e.message, self.path)
+            except DatabaseError, e:
+                raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
         else:
             self.remove()
             self.add(value)
@@ -166,6 +172,8 @@ class Pointer(object):
                 raise PathError('not found', self.path)
             except (ValueError, TypeError), e:
                 raise DataError(e.message, self.path)
+            except DatabaseError, e:
+                raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
         else:
             self.remove()
 
@@ -182,6 +190,8 @@ class Pointer(object):
                 raise PathError('not found', self.path)
             except (ValueError, TypeError), e:
                 raise DataError(e.message, self.path)
+            except DatabaseError, e:
+                raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
         else:
             self.add(value)
 
