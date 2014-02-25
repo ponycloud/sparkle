@@ -6,7 +6,6 @@ from __future__ import unicode_literals
 import re
 
 from collections import Mapping, MutableMapping, Sequence, MutableSequence
-from sqlalchemy.orm.exc import UnmappedInstanceError
 from pprint import pformat
 from uuid import uuid4
 
@@ -223,10 +222,10 @@ class Collection(DbDict):
         Attempts to obtain child of a different parent will fail.
         """
 
-        try:
-            # Load the child entity for additional checking.
-            child = getattr(self.db, self.schema.table.name).get(key)
-        except UnmappedInstanceError:
+        # Load the child entity for additional checking.
+        child = getattr(self.db, self.schema.table.name).get(key)
+
+        if child is None:
             raise KeyError(key)
 
         # Verify that all filters are met.
@@ -294,11 +293,8 @@ class Collection(DbDict):
         if key not in self:
             raise KeyError(key)
 
-        try:
-            self.db.delete(getattr(self.db, self.schema.table.name).get(key))
-            self.db.flush()
-        except UnmappedInstanceError:
-            raise KeyError(key)
+        self.db.delete(getattr(self.db, self.schema.table.name).get(key))
+        self.db.flush()
 
     def preprocess(self, fragment, uuids, safe):
         for k, v in fragment.items():
@@ -483,9 +479,7 @@ class Desired(DbDict):
                     if k in uuid_pkeys and safe:
                         # Primary keys cannot be created by the user,
                         # but they can be used if the entity already exists.
-                        try:
-                            self.get_soup_entity()
-                        except:
+                        if self.get_soup_entity() is None:
                             raise ValueError('user-defined pkey uuid %r' % (v,))
                 else:
                     try:
