@@ -11,7 +11,7 @@ from zope.interface import implements
 from simplejson import loads, dumps
 from time import time
 
-from sparkle.util import uuidgen
+from uuid import uuid4
 
 class Router(object):
     """
@@ -40,7 +40,7 @@ class Router(object):
         if identity is not None:
             self.socket.setsockopt(zmq.IDENTITY, identity)
         else:
-            self.socket.setsockopt(zmq.IDENTITY, uuidgen())
+            self.socket.setsockopt(zmq.IDENTITY, str(uuid4()))
 
         # Remember the default recipient.
         self.default_recipient = default_recipient

@@ -23,7 +23,7 @@ from time import time
 from collections import Mapping
 
 from sparkle.common import *
-from sparkle.util import call_sync
+from sparkle.util import call_sync, remove_nulls
 from sparkle.schema import schema
 from sparkle.rest import Flaskful, json_response
 from sparkle.auth import sign_token
@@ -63,15 +63,6 @@ def path_to_rule(path):
                 covered.add(key)
 
     return '/v1' + '/'.join(fullpath)
-
-
-def remove_nulls(data):
-    """Recursively remove None values from dictionary."""
-
-    if not isinstance(data, Mapping):
-        return data
-
-    return {k: remove_nulls(v) for k, v in data.iteritems() if v is not None}
 
 
 def convert_errors(fn):
