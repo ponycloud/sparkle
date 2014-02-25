@@ -41,8 +41,7 @@ class Placement(object):
             host = new.desired['host']
             self.manager.bestow(host, new, new)
         elif old.desired:
-            host = old.desired['host']
-            self.manager.withdraw(host, old, old)
+            self.manager.withdraw_all(old, old)
 
 
     def on_bond_changed(self, old, new):
@@ -54,8 +53,7 @@ class Placement(object):
             host = new.desired['host']
             self.manager.bestow(host, new, new)
         elif old.desired:
-            host = old.desired['host']
-            self.manager.withdraw(host, old, old)
+            self.manager.withdraw_all(old, old)
 
 
     def on_nic_role_changed(self, old, new):
@@ -65,12 +63,9 @@ class Placement(object):
 
         if new.desired:
             bond = self.manager.model['bond'][new.desired['bond']]
-            host = bond.desired['host']
-            self.manager.bestow(host, new, bond)
+            self.manager.bestow(bond.desired['host'], new, new)
         elif old.desired:
-            bond = self.manager.model['bond'][old.desired['bond']]
-            host = bond.desired['host']
-            self.manager.withdraw(host, old, bond)
+            self.manager.withdraw_all(old, old)
 
 
     def maybe_bestow_storage_pool(self, host_id, pool_id):

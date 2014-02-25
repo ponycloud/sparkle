@@ -191,13 +191,35 @@ class Manager(object):
 
         owners.add(owner)
 
-    def withdraw(self, host, row, owner):
+    def withdraw_all(self, row, owner=None):
+        """
+        Withdraw given row on all hosts for specified owner.
+
+        This function is ideal for situations where a row have
+        been completely deconfigured and should not appear anywhere.
+        We do not want to look up explicit hosts in that situation,
+        especially since row parents might have been deconfigured in
+        the same transaction.
+        """
+
+        if isinstance(row, Row):
+            row = (row.table.name, row.pkey)
+
+        for host in list(self.rows.get(row, ())):
+            self.withdraw(host, row, owner)
+
+    def withdraw(self, host, row, owner=None):
         """
         Remove row placement on given host for specified owner.
 
         As with `bestow()` the host, row and owner can be supplied as
         either identificators or corresponding objects.
+
+        Owner defaults to the row in question.
         """
+
+        if owner is None:
+            owner = row
 
         if isinstance(host, basestring):
             host = self.hosts[host]
