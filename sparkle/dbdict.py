@@ -10,6 +10,7 @@ from sqlalchemy.orm.exc import UnmappedInstanceError
 from pprint import pformat
 from uuid import uuid4
 
+from sparkle.common import *
 from sparkle.schema import schema
 
 __doc__ = """
@@ -74,11 +75,15 @@ def preprocess_dbdict_patch(patch):
     for op in patch:
         value = op.get('value', {})
         path  = op.get('path', [])
+        write = ('test' != op['op'])
 
-        op['value'] = preprocess_dbdict_fragment(value, path, uuids, ('test' != op['op']))
+        try:
+            op['value'] = preprocess_dbdict_fragment(value, path, uuids, write)
 
-        if 'from' in op:
-            preprocess_dbdict_fragment({}, op['from'], uuids, False)
+            if 'from' in op:
+                preprocess_dbdict_fragment({}, op['from'], uuids, False)
+        except ValueError, e:
+            raise PatchError(e.message, path)
 
     return uuids
 
