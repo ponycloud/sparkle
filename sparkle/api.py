@@ -29,7 +29,7 @@ from sparkle.rest import Flaskful, json_response
 from sparkle.auth import sign_token
 from sparkle.validate import validate_json_patch, validate_dbdict_fragment
 from sparkle.patch import Pointer, normalize_path
-from sparkle.dbdict import preprocess_dbdict_patch, Children
+from sparkle.dbdict import preprocess_patch, Children
 
 import flask
 
@@ -93,15 +93,15 @@ def make_sparkle_app(manager):
         """
 
         try:
+            # Get root of the database dictionary mapping.
+            root = Children(manager.db, schema.root)
+
             # Convert placeholders in the input patch to actual uuids.
             # Returns mapped placeholders for client to orient himself.
-            uuids = preprocess_dbdict_patch(patch)
-
-            # Get root of the database dictionary mapping.
-            root = Pointer(Children(manager.db, schema.root))
+            uuids = preprocess_patch(root, patch)
 
             # Apply the patch.
-            root.patch(patch)
+            Pointer(root).patch(patch)
 
             # Determine our transaction id.
             txid = int(manager.db.execute('SELECT cork();').fetchone()[0])

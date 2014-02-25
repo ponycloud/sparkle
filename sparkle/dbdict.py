@@ -13,6 +13,8 @@ from uuid import uuid4
 from sparkle.common import *
 from sparkle.schema import schema
 
+__all__ = ['preprocess_patch']
+
 __doc__ = """
 Database to Dictionary
 
@@ -45,7 +47,7 @@ def is_uuid(uuid):
         return False
 
 
-def preprocess_dbdict_fragment(fragment, path, uuids, safe):
+def preprocess_fragment(children, fragment, path, uuids, safe):
     """
     Wrap selected fragment with several dicts representing the path
     leading to it and then put it through UUID mapping process.
@@ -57,7 +59,7 @@ def preprocess_dbdict_fragment(fragment, path, uuids, safe):
     for part in reversed(path):
         fragment = {part: fragment}
 
-    Children.preprocess(fragment, uuids, schema.root, safe)
+    children.preprocess(fragment, uuids, safe)
 
     for i in xrange(len(path)):
         key = fragment.keys()[0]
@@ -67,8 +69,18 @@ def preprocess_dbdict_fragment(fragment, path, uuids, safe):
     return fragment
 
 
-def preprocess_dbdict_patch(patch):
-    """Preprocess all operations of a valid DbDict patch."""
+def preprocess_patch(children, patch):
+    """
+    Preprocess all operations of a valid DbDict JSON Patch.
+    The patch is modified in-place.
+
+    Database access through the ``Children`` instance is required for
+    primary key validation.  We do not allow client to define new uuids,
+    but he can refer to existing ones.
+
+    :param children:  The root ``Children`` for database access.
+    :param patch:     Patch to be pre-processed.
+    """
 
     uuids = {}
 
@@ -78,10 +90,10 @@ def preprocess_dbdict_patch(patch):
         write = ('test' != op['op'])
 
         try:
-            op['value'] = preprocess_dbdict_fragment(value, path, uuids, write)
+            op['value'] = preprocess_fragment(children, value, path, uuids, write)
 
             if 'from' in op:
-                preprocess_dbdict_fragment({}, op['from'], uuids, False)
+                preprocess_fragment(children, {}, op['from'], uuids, False)
         except ValueError, e:
             raise PatchError(e.message, path)
 
@@ -191,10 +203,10 @@ class Children(DbDict):
             if not child.table.virtual:
                 yield name
 
-    @staticmethod
-    def preprocess(fragment, uuids, endpoint, safe):
+    def preprocess(self, fragment, uuids, safe):
         for k, v in fragment.iteritems():
-            Collection.preprocess(v, uuids, endpoint.children[k], safe)
+            c = Collection(self.db, self.schema.children[k], self.pkey)
+            c.preprocess(v, uuids, safe)
 
 
 class Collection(DbDict):
@@ -288,13 +300,12 @@ class Collection(DbDict):
         except UnmappedInstanceError:
             raise KeyError(key)
 
-    @staticmethod
-    def preprocess(fragment, uuids, endpoint, safe):
+    def preprocess(self, fragment, uuids, safe):
         for k, v in fragment.items():
             # Only enforce on uuid or composite keys.
-            if endpoint.table.pkey == 'uuid' or \
-               not isinstance(endpoint.table.pkey, basestring) \
-               and not endpoint.table.user_pkey:
+            if self.schema.table.pkey == 'uuid' or \
+               not isinstance(self.schema.table.pkey, basestring) \
+               and not self.schema.table.user_pkey:
 
                 # If the key is not a valid uuid, treat it as a placeholder
                 # and generate new replacement uuid.
@@ -308,7 +319,8 @@ class Collection(DbDict):
                     del fragment[k]
                     k = nk
 
-            Entity.preprocess(fragment[k], uuids, endpoint, safe)
+            entity = Entity(self.db, self.schema, k)
+            entity.preprocess(v, uuids, safe)
 
 
 class Entity(DbDict):
@@ -345,13 +357,9 @@ class Entity(DbDict):
 
         raise TypeError('immutable field')
 
-    @staticmethod
-    def preprocess(fragment, uuids, endpoint, safe):
+    def preprocess(self, fragment, uuids, safe):
         for k, v in fragment.iteritems():
-            if 'desired' == k:
-                Desired.preprocess(v, uuids, endpoint, safe)
-            elif 'children' == k:
-                Children.preprocess(v, uuids, endpoint, safe)
+            self.data[k].preprocess(v, uuids, safe)
 
 
 class Desired(DbDict):
@@ -446,25 +454,24 @@ class Desired(DbDict):
         setattr(entity, key, value)
         self.db.flush()
 
-    @staticmethod
-    def preprocess(fragment, uuids, endpoint, safe):
+    def preprocess(self, fragment, uuids, safe):
         # Generate set of keys that should be uuids.
         # Start with a possibly 'uuid' primary key.
         uuid_pkeys = set(['uuid'])
         uuid_fkeys = set()
 
         # Except when we explicitly want user-defined uuids.
-        if endpoint.table.user_pkey:
+        if self.schema.table.user_pkey:
             uuid_pkeys = set()
 
         # Include all composite primary key fields if applicable.
-        if not isinstance(endpoint.table.pkey, basestring):
-            for pkey in endpoint.table.pkey:
+        if not isinstance(self.schema.table.pkey, basestring):
+            for pkey in self.schema.table.pkey:
                 uuid_pkeys.add(pkey)
 
         # And definitely add all foreign keys that have an 'uuid'
         # primary key as their target.
-        for fkey in endpoint.table.fkeys:
+        for fkey in self.schema.table.fkeys:
             ftable = schema.tables[fkey]
             if ftable.pkey == 'uuid' and not ftable.user_pkey:
                 uuid_fkeys.add(fkey)
@@ -474,7 +481,7 @@ class Desired(DbDict):
             if k in uuid_pkeys or k in uuid_fkeys:
                 if is_uuid(v):
                     if k in uuid_pkeys and safe:
-                        # Primary keys cannot be set by the user.
+                        # Primary keys cannot be created by the user.
                         raise ValueError('user-defined pkey uuid %r' % (v,))
                 else:
                     try:
