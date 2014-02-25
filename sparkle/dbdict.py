@@ -481,8 +481,12 @@ class Desired(DbDict):
             if k in uuid_pkeys or k in uuid_fkeys:
                 if is_uuid(v):
                     if k in uuid_pkeys and safe:
-                        # Primary keys cannot be created by the user.
-                        raise ValueError('user-defined pkey uuid %r' % (v,))
+                        # Primary keys cannot be created by the user,
+                        # but they can be used if the entity already exists.
+                        try:
+                            self.get_soup_entity()
+                        except:
+                            raise ValueError('user-defined pkey uuid %r' % (v,))
                 else:
                     try:
                         if v in uuids:

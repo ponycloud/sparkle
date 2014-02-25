@@ -19,6 +19,7 @@ __all__ = ['Pointer', 'normalize_path']
 
 
 from sparkle.common import *
+from sparkle.util import remove_nulls
 
 from collections import Iterable, Mapping, MutableMapping
 from sqlalchemy.exc import DatabaseError
@@ -40,7 +41,9 @@ def normalize_path(path):
     if isinstance(path, basestring):
         if '/' != path[:1]:
             raise DataError('path missing the leading /', path)
-        return [unescape(part) for part in path.split('/')][1:]
+        if '/' == path:
+            return []
+        return [unescape(part) for part in path[1:].split('/')]
 
     raise DataError('invalid path', path)
 
@@ -94,6 +97,11 @@ class Pointer(object):
         return Pointer(parent, self.path + path)
 
 
+    def exists(self):
+        """Return True if the pointer target exists."""
+        return self.key in self.parent
+
+
     def get(self):
         """
         Retrieve the pointed-to value.
@@ -128,7 +136,7 @@ class Pointer(object):
         try:
             if hasattr(self.parent, 'add'):
                 self.parent.add(self.key, value)
-            elif self.key in self.parent:
+            elif self.exists():
                 raise DataError('path already exists', self.path)
             else:
                 self.parent[self.key] = value
@@ -196,6 +204,28 @@ class Pointer(object):
             self.add(value)
 
 
+    def merge(self, value):
+        """
+        Merge another dict in the target.
+        """
+
+        for k, v in value.iteritems():
+            target = self.relative([k])
+
+            if v is None:
+                if target.exists():
+                    return target.remove()
+                return
+
+            if not target.exists():
+                return target.add(remove_nulls(v))
+
+            if not isinstance(value, Mapping):
+                return target.replace(remove_nulls(v))
+
+            return target.merge(v)
+
+
     def patch(self, ops):
         """
         Apply a complete patch with paths being relative to the Pointer.
@@ -210,7 +240,7 @@ class Pointer(object):
 
             dst = self.relative(path)
 
-            if op in ('test', 'add', 'replace'):
+            if op in ('test', 'add', 'replace', 'x-merge'):
                 value = item['value']
 
             if op in ('move', 'copy'):
@@ -233,6 +263,8 @@ class Pointer(object):
                 dst.paste(src.cut())
             elif op == 'copy':
                 dst.add(src.get())
+            elif op == 'x-merge':
+                dst.merge(value)
 
 
 # vim:set sw=4 ts=4 et:
