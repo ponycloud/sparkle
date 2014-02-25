@@ -192,9 +192,9 @@ class Children(DbDict):
                 yield name
 
     @staticmethod
-    def preprocess(fragment, uuids, cschema, safe):
+    def preprocess(fragment, uuids, endpoint, safe):
         for k, v in fragment.iteritems():
-            Collection.preprocess(v, uuids, cschema.children[k], safe)
+            Collection.preprocess(v, uuids, endpoint.children[k], safe)
 
 
 class Collection(DbDict):
@@ -289,12 +289,12 @@ class Collection(DbDict):
             raise KeyError(key)
 
     @staticmethod
-    def preprocess(fragment, uuids, cschema, safe):
+    def preprocess(fragment, uuids, endpoint, safe):
         for k, v in fragment.items():
             # Only enforce on uuid or composite keys.
-            if cschema.table.pkey == 'uuid' or \
-               not isinstance(cschema.table.pkey, basestring) \
-               and not cschema.table.user_pkey:
+            if endpoint.table.pkey == 'uuid' or \
+               not isinstance(endpoint.table.pkey, basestring) \
+               and not endpoint.table.user_pkey:
 
                 # If the key is not a valid uuid, treat it as a placeholder
                 # and generate new replacement uuid.
@@ -308,7 +308,7 @@ class Collection(DbDict):
                     del fragment[k]
                     k = nk
 
-            Entity.preprocess(fragment[k], uuids, cschema, safe)
+            Entity.preprocess(fragment[k], uuids, endpoint, safe)
 
 
 class Entity(DbDict):
@@ -346,12 +346,12 @@ class Entity(DbDict):
         raise TypeError('immutable field')
 
     @staticmethod
-    def preprocess(fragment, uuids, eschema, safe):
+    def preprocess(fragment, uuids, endpoint, safe):
         for k, v in fragment.iteritems():
             if 'desired' == k:
-                Desired.preprocess(v, uuids, eschema, safe)
+                Desired.preprocess(v, uuids, endpoint, safe)
             elif 'children' == k:
-                Children.preprocess(v, uuids, eschema, safe)
+                Children.preprocess(v, uuids, endpoint, safe)
 
 
 class Desired(DbDict):
@@ -447,24 +447,24 @@ class Desired(DbDict):
         self.db.flush()
 
     @staticmethod
-    def preprocess(fragment, uuids, dschema, safe):
+    def preprocess(fragment, uuids, endpoint, safe):
         # Generate set of keys that should be uuids.
         # Start with a possibly 'uuid' primary key.
         uuid_pkeys = set(['uuid'])
         uuid_fkeys = set()
 
         # Except when we explicitly want user-defined uuids.
-        if dschema.table.user_pkey:
+        if endpoint.table.user_pkey:
             uuid_pkeys = set()
 
         # Include all composite primary key fields if applicable.
-        if not isinstance(dschema.table.pkey, basestring):
-            for pkey in dschema.table.pkey:
+        if not isinstance(endpoint.table.pkey, basestring):
+            for pkey in endpoint.table.pkey:
                 uuid_pkeys.add(pkey)
 
         # And definitely add all foreign keys that have an 'uuid'
         # primary key as their target.
-        for fkey in dschema.table.fkeys:
+        for fkey in endpoint.table.fkeys:
             ftable = schema.tables[fkey]
             if ftable.pkey == 'uuid' and not ftable.user_pkey:
                 uuid_fkeys.add(fkey)
