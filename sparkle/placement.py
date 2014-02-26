@@ -27,9 +27,9 @@ class Placement(object):
         """
 
         if new.desired:
-            self.manager.bestow(new.pkey, new, new)
+            self.manager.bestow(new.pkey, new)
         else:
-            self.manager.withdraw(new.pkey, old, old)
+            self.manager.withdraw(new.pkey, old)
 
 
     def on_nic_changed(self, old, new):
@@ -39,7 +39,7 @@ class Placement(object):
 
         if new.desired:
             host = new.desired['host']
-            self.manager.bestow(host, new, new)
+            self.manager.bestow(host, new)
         elif old.desired:
             self.manager.withdraw_all(old, old)
 
@@ -51,7 +51,7 @@ class Placement(object):
 
         if new.desired:
             host = new.desired['host']
-            self.manager.bestow(host, new, new)
+            self.manager.bestow(host, new)
         elif old.desired:
             self.manager.withdraw_all(old, old)
 
@@ -63,7 +63,7 @@ class Placement(object):
 
         if new.desired:
             bond = self.manager.model['bond'][new.desired['bond']]
-            self.manager.bestow(bond.desired['host'], new, new)
+            self.manager.bestow(bond.desired['host'], new)
         elif old.desired:
             self.manager.withdraw_all(old, old)
 

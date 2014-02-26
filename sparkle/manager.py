@@ -156,13 +156,16 @@ class Manager(object):
         self.hosts[message['uuid']].receive(message, sender)
 
 
-    def bestow(self, host, row, owner):
+    def bestow(self, host, row, owner=None):
         """
         Place selected row on a host with defined owner row.
 
         It is possible to define both row and owner as a `(name, pkey)`
         tuple instead.  Host can be either it's uuid or a Twilight instance.
         """
+
+        if owner is None:
+            owner = row
 
         if isinstance(host, basestring):
             if host not in self.hosts:
