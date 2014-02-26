@@ -32,9 +32,9 @@ def validate_json_patch(data):
     """
     Validate that given object corresponds to a valid JSON Patch.
 
-    We tolerate usage of list instead of string for path properties,
-    accept an additional operation 'x-merge' but otherwise don't peek
-    into the patch values.
+    We tolerate usage of list instead of string for path and from properties,
+    accept additional operations 'x-merge' and 'x-verify', but otherwise
+    don't peek into the patch values.
 
     Raises an DataError if the patch does not match the prescribed schema.
     """

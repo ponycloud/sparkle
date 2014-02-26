@@ -209,21 +209,34 @@ class Pointer(object):
         Merge another dict in the target.
         """
 
+        if value is None:
+            if self.exists():
+                return self.remove()
+            return
+
+        if not self.exists():
+            return self.add(remove_nulls(value))
+
+        if not isinstance(value, Mapping):
+            return self.replace(value)
+
         for k, v in value.iteritems():
-            target = self.relative([k])
+            self.relative([k]).merge(v)
 
-            if v is None:
-                if target.exists():
-                    return target.remove()
-                return
 
-            if not target.exists():
-                return target.add(remove_nulls(v))
+    def verify(self, muster):
+        """
+        Recursively verify that mapping contains values defined in the muster.
+        """
 
-            if not isinstance(value, Mapping):
-                return target.replace(remove_nulls(v))
+        if not isinstance(muster, Mapping):
+            return self.get() == muster
 
-            return target.merge(v)
+        for k, v in muster.iteritems():
+            if not self.relative([k]).verify(v):
+                return False
+
+        return True
 
 
     def patch(self, ops):
@@ -265,6 +278,9 @@ class Pointer(object):
                 dst.add(src.get())
             elif op == 'x-merge':
                 dst.merge(value)
+            elif op == 'x-verify':
+                if not dst.verify(value):
+                    raise ConflictError('value verification failed', dst.path)
 
 
 # vim:set sw=4 ts=4 et:
