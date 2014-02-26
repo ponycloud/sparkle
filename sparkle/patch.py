@@ -253,7 +253,7 @@ class Pointer(object):
 
             dst = self.relative(path)
 
-            if op in ('test', 'add', 'replace', 'x-merge'):
+            if op in ('test', 'add', 'replace', 'x-merge', 'x-verify'):
                 value = item['value']
 
             if op in ('move', 'copy'):
