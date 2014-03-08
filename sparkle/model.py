@@ -1,95 +1,72 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-__all__ = ['Model', 'Table', 'Row']
+__all__ = ['Model', 'OverlayModel', 'Table', 'Row']
 
-
+from collections import Mapping, MutableMapping
 from sparkle.schema import schema
 
 
-class Model(dict):
+class Model(Mapping):
     """
     PonyCloud Data Model
 
-    This model holds both the current and desired state of all managed
-    entities plus some join tables.  Most of the desired state corresponds
-    to database tables, rest are virtual tables that only exist in memory.
-    Current state resides in memory only and copies desired state entity
-    primary keys when not completely standalone.
+    This model is actually a cache with desired state from the database and
+    current state sent from individual hosts.
+
+    It is organized in tables with rows, some of the columns being indexed
+    for fast lookup.  Every row have two "parts" -- the current and desired
+    state portion that can be a dictionary or None, depending on presence
+    of the portion in question.  Not all rows have both parts.
     """
 
+    __slots__ = ['current', 'desired']
+
     def __init__(self):
-        """Constructs the model."""
+        # Keep separate per-table indexed mappings for both states.
+        self.desired = {}
+        self.current = {}
 
-        # Prepare all model tables.
+        # Pre-define the mappings.
         for name, table in schema.tables.iteritems():
-            self[name] = Table(self, name, table)
+            self.desired[name] = IndexedMapping(indexes=table.index)
+            self.current[name] = IndexedMapping(indexes=table.index)
 
-        # Original states of the row parts before the transaction.
-        self.undo = {}
+    def __getitem__(self, key):
+        return Table(self, key)
 
-        # New states of the row parts after the transaction.
-        self.redo = {}
+    def __iter__(self):
+        return iter(schema.tables)
 
-        # Callbacks that wish to be notified about changed rows when
-        # the transaction is committed.
-        self.callbacks = set()
+    def __len__(self):
+        return len(schema.tables)
 
-    def add_callback(self, callback):
+    def load(self, changes):
         """
-        Add callback to be notified about row changes.
+        Apply bulk of row part changes to the model.
 
-        Every transaction will execute the callback for every changed row
-        with old state of the row as the first and new state of the row as
-        the second argument.
-        """
+        Every change in the set is a 4-element-tuple of::
 
-        self.callbacks.add(callback)
+            ('table', 'pkey', 'desired|current', {'some': 'data'})
 
-    def remove_callback(self, callback):
-        """Remove previously added callback."""
-        self.callbacks.discard(callback)
+        Specified table must exist and only 'desired' and 'current' are
+        the only allowed states.  Data must either be a mapping or None,
+        with None translating to removal of that part.
 
-    def dump(self, states=['desired', 'current']):
-        """
-        Dump given states from all table rows.
-
-        The output format (compatible with Model.load) is
-        `[(table, state, pkey, part), ...]`.
+        Invalid changes will produce exceptions.
         """
 
-        out = []
+        for name, pkey, state, data in changes:
+            if state not in ('desired', 'current'):
+                raise ValueError('%r is not a valid state' % (state,))
 
-        for name, table in self.iteritems():
-            for row in table.itervalues():
-                for state in states:
-                    if getattr(row, state) is not None:
-                        out.append((name, row.pkey, state, getattr(row, state)))
+            table = getattr(self, state)[name]
 
-        return out
-
-    def load(self, data):
-        """
-        Load previously dumped data.
-
-        Do not forget to `commit()` the changes to the model afterwards.
-        """
-
-        for name, pkey, state, part in data:
-            self[name].replace_row(self[name].changed_row(pkey, state, part))
-
-    def commit(self):
-        """
-        Run all pending callbacks and drop the undo data.
-        """
-
-        for key, new_row in self.redo.iteritems():
-            old_row = self.undo[key]
-            for callback in self.callbacks:
-                callback(old_row, new_row)
-
-        self.undo = {}
-        self.redo = {}
+            if data is None:
+                if pkey in table:
+                    del table[pkey]
+            else:
+                table[pkey] = data
 
     def path_row(self, path, keys):
         """
@@ -110,11 +87,11 @@ class Model(dict):
             if isinstance(pkey, basestring):
                 # Ensure we have the key matching our table name if this
                 # table uses a simple single-column primary key.
-                filter.update({pkey: keys[name]})
+                filter[pkey] = keys[name]
             else:
                 # Ensure all columns for composite primary key are matched.
                 for subkey in pkey:
-                    filter.update({subkey: keys[subkey]})
+                    filter[subkey] = keys[subkey]
 
             # We may have a parent relation to filter by, too.
             if endpoint.parent.table:
@@ -123,10 +100,10 @@ class Model(dict):
 
                 # Filter according to parent relation.
                 if isinstance(ppkey, basestring):
-                    filter.update({pname: keys[pname]})
+                    filter[pname] = keys[pname]
                 else:
                     for subkey in ppkey:
-                        filter.update({subkey: keys[subkey]})
+                        filter[subkey] = keys[subkey]
 
             # Obtain the matching row or raise an error.
             row = self[name].one(**filter)
@@ -134,97 +111,156 @@ class Model(dict):
         return row
 
 
-class Table(dict):
+class OverlayModel(Model):
     """
-    Data Model Table
-
-    Whole model is organized into indexed tables with changes
-    propagated by a notification system.
-
-    Every table have a unique primary key or set of them,
-    as in case of join tables.  Any of the columns can also
-    be indexed for queries.
+    Copy-on-write model wrapper utilizing overlay mappings.
     """
 
-    def __init__(self, model, name, schema):
-        """Prepare internal data structures of the table."""
+    __slots__ = ['parent', 'current', 'desired', 'callbacks']
 
-        # Store necessary attributes.
-        self.model  = model
-        self.name   = name
-        self.schema = schema
+    def __init__(self, parent):
+        self.parent = parent
+        self.callbacks = set()
 
-        # Start with empty indexes.
-        self.index = {i: {'desired': {}, 'current': {}} \
-                      for i in self.schema.index}
+        self.desired = {}
+        self.current = {}
 
-    def changed_row(self, pkey, state, part):
+        for name, table in schema.tables.iteritems():
+            self.desired[name] = OverlayMapping(parent.desired[name])
+            self.current[name] = OverlayMapping(parent.current[name])
+
+    def add_callback(self, cb):
         """
-        Create modified row object from a change and table data.
-        """
-
-        if pkey in self:
-            row = self[pkey].clone()
-        else:
-            row = Row(self, pkey)
-
-        setattr(row, state, part)
-        return row
-
-    def replace_row(self, new_row):
-        """
-        Replace row with a modified one.
+        Add callback function that will be called with old and new row
+        right before the changes staged in the overlay are committed.
         """
 
-        pkey = new_row.pkey
+        self.callbacks.add(cb)
 
-        if pkey in self:
-            old_row = self[pkey]
-            old_row.unindex(self)
-        else:
-            old_row = Row(self, pkey)
+    def remove_callback(self, cb):
+        """Discard a previously added callback function."""
+        self.callbacks.discard(cb)
 
-        if new_row.desired is None and new_row.current is None:
-            if pkey in self:
-                del self[pkey]
-        else:
-            self[pkey] = new_row
-            new_row.index(self)
-
-        if not (self.name, pkey) in self.model.undo:
-            self.model.undo[(self.name, pkey)] = old_row
-
-        self.model.redo[(self.name, pkey)] = new_row
-
-    def list(self, **keys):
+    def commit(self):
         """
-        Return rows with indexed columns matching given keys.
-        Asking for non-indexed keys will result in a failure.
+        Apply all changes in the overlay to the underlying model.
         """
 
-        selection = None
-        for k, v in keys.iteritems():
-            subselection = set()
-            for state in ('desired', 'current'):
-                if v in self.index[k][state]:
-                    subselection.update(self.index[k][state][v])
+        modified = set()
 
-            if selection is None:
-                selection = subselection
+        for name in schema.tables:
+            for key in self.desired[name].deleted:
+                modified.add((name, key))
+
+            for key in self.current[name].deleted:
+                modified.add((name, key))
+
+            for key in self.desired[name].overlay:
+                modified.add((name, key))
+
+            for key in self.current[name].overlay:
+                modified.add((name, key))
+
+        for name, key in modified:
+            if key in self.parent[name]:
+                old = self.parent[name][key]
             else:
-                selection.intersection_update(subselection)
+                old = Row(self.parent[name], key)
 
-        if selection is None:
-            return self.values()
+            if key in self[name]:
+                new = self[name][key]
+            else:
+                new = Row(self[name], key)
 
-        return [self[k] for k in selection]
+            for callback in self.callbacks:
+                callback(old, new)
+
+        for name in schema.tables:
+            self.desired[name].commit()
+            self.current[name].commit()
+
+    def rollback(self):
+        """
+        Discard the overlay data and reset to the underlying model state.
+        """
+
+        for name in schema.tables:
+            self.desired[name].rollback()
+            self.current[name].rollback()
+
+
+class Table(Mapping):
+    """
+    Abstraction of a table that takes data from the model.
+
+    Provides some querying capabilities combining data from both
+    current and desired state, returning Row objects.
+    """
+
+    __slots__ = ['model', 'name']
+
+    def __init__(self, model, name):
+        self.model = model
+        self.name = name
+
+    @property
+    def schema(self):
+        return schema.tables[self.name]
+
+    @property
+    def current(self):
+        return self.model.current[self.name]
+
+    @property
+    def desired(self):
+        return self.model.desired[self.name]
+
+    def __getitem__(self, key):
+        if key not in self.desired and key not in self.current:
+            raise KeyError(key)
+
+        return Row(self, key)
+
+    def __iter__(self):
+        for key in self.desired:
+            yield key
+
+        for key in self.current:
+            if key not in self.desired:
+                yield key
+
+    def __len__(self):
+        return len(set().union(self.current, self.desired))
+
+    def list(self, **fields):
+        """
+        Query rows with matching fields in either desired or current state.
+        """
+
+        return [Row(self, k) for k in self.list_keys(**fields)]
+
+    def list_keys(self, **fields):
+        """
+        Same as list, but return only the primary keys.
+        """
+
+        result = None
+
+        for f, fv in fields.iteritems():
+            subresult = self.desired.lookup(f, fv)
+            subresult = subresult.union(self.current.lookup(f, fv))
+
+            if result is None:
+                result = subresult
+            else:
+                result = result.intersect(subresult)
+
+        return result or set(self)
 
     def one(self, **keys):
         """
-        Same as list(), but returns just one item.
-
-        If the item is not found, or there are multiple such items,
-        raises KeyError.
+        Same as list(), but return just one item.
+        If there are more rows or no rows at all, raises KeyError.
         """
 
         items = self.list(**keys)
@@ -237,30 +273,23 @@ class Table(dict):
 
         return items[0]
 
-    def get_watch_handler(self, model, assign_callback):
-        def f(table, row):
-            assign_callback(table, row, row.get_desired('host'))
-        return f
-
 
 class Row(object):
-    # Each row have two parts, one for each "state".
-    __slots__ = ['table', 'pkey', 'desired', 'current']
-
-
-    def __init__(self, table, pkey, desired=None, current=None):
-        """
-        Initializes the row.
-        """
-
-        self.pkey = pkey
+    def __init__(self, table, pkey):
         self.table = table
-        self.desired = desired
-        self.current = current
+        self.pkey = pkey
 
-    def clone(self):
-        """Clone an existing row."""
-        return Row(self.table, self.pkey, self.desired, self.current)
+    @property
+    def model(self):
+        return self.table.model
+
+    @property
+    def desired(self):
+        return self.table.model.desired[self.table.name].get(self.pkey)
+
+    @property
+    def current(self):
+        return self.table.model.current[self.table.name].get(self.pkey)
 
     def get_tenants(self):
         """
@@ -298,59 +327,197 @@ class Row(object):
         return tenants
 
     def get_current(self, key, default=None):
-        """Get value for given key in the current state."""
-        if self.current is None or key not in self.current:
+        """
+        Get value for given key in the current state.
+        """
+
+        if self.current is None:
             return default
-        return self.current[key]
+
+        return self.current.get(key, default)
 
     def get_desired(self, key, default=None):
-        """Get value for given key in the current state."""
-        if self.desired is None or key not in self.desired:
+        """
+        Get value for given key in the current state.
+        """
+
+        if self.desired is None:
             return default
-        return self.desired[key]
 
-    def index(self, table):
-        """Index the row into the table's indexes."""
-        for state in ('desired', 'current'):
-            for idx in table.schema.index:
-                part = getattr(self, state)
-                if part is not None and idx in part:
-                    table.index[idx][state].setdefault(part[idx], set())
-                    table.index[idx][state][part[idx]].add(self.pkey)
+        return self.desired.get(key, default)
 
-    def unindex(self, table):
-        """Remove the row from table's indexes."""
-        for state in ('desired', 'current'):
-            for idx in table.schema.index:
-                part = getattr(self, state)
-                if part is not None and idx in part:
-                    if part[idx] in table.index[idx][state]:
-                        table.index[idx][state][part[idx]].remove(self.pkey)
-                        if 0 == len(table.index[idx][state][part[idx]]):
-                            del table.index[idx][state][part[idx]]
 
-    def to_dict(self):
-        """
-        Convert row to a dictionary with pkey, desired and current.
+class OverlayMapping(MutableMapping):
+    """
+    Copy-on-write view that uses two indexed mappings.
 
-        Both desired and current may be missing if that part is not
-        present in the row.
-        """
+    Normally works in the read-from-both, write-to-one mode,
+    but can also flush the differences to the underlying mapping.
+    """
 
-        result = {'pkey': self.pkey}
+    __slots__ = ['parent', 'overlay', 'deleted']
 
-        if self.current:
-            result['current'] = self.current
+    def __init__(self, parent):
+        self.parent = parent
+        self.overlay = IndexedMapping(parent.idx)
+        self.deleted = set()
 
-        if self.desired:
-            result['desired'] = self.desired
+    def __getitem__(self, key):
+        try:
+            return self.overlay[key]
+        except KeyError:
+            if key in self.deleted:
+                raise KeyError(key)
+            return self.parent[key]
 
-        return result
+    def __setitem__(self, key, value):
+        self.overlay[key] = value
+        if key in self.parent:
+            self.deleted.add(key)
+
+    def __delitem__(self, key):
+        if key in self.overlay:
+            del self.overlay[key]
+        elif key in self.deleted:
+            raise KeyError(key)
+        elif key in self.parent:
+            self.deleted.add(key)
+        else:
+            raise KeyError(key)
+
+    def __contains__(self, key):
+        if key in self.overlay:
+            return True
+
+        return key not in self.deleted and key in self.parent
+
+    def __iter__(self):
+        for key in self.overlay:
+            yield key
+
+        for key in self.parent:
+            if key not in self.deleted and key not in self.overlay:
+                yield key
+
+    def __len__(self):
+        return len(self.overlay) + len(self.parent) - len(self.deleted)
 
     def __repr__(self):
-        desired = ' +desired' if self.desired is not None else ''
-        current = ' +current' if self.current is not None else ''
-        return '<Row %s%s%s>' % (self.pkey, desired, current)
+        return repr(dict(self))
+
+    def lookup(self, name, value):
+        parent  = self.parent.lookup(name, value)
+        overlay = self.overlay.lookup(name, value)
+        return parent.difference(self.deleted).union(overlay)
+
+    def kwlookup(self, **fields):
+        parent  = self.parent.kwlookup(**fields)
+        overlay = self.overlay.kwlookup(**fields)
+        return parent.difference(self.deleted).union(overlay)
+
+    def filter(self, **fields):
+        return {k: self[k] for k in self.kwlookup(**fields)}
+
+    def rollback(self):
+        """
+        Discard the overlay data and reset to the underlying mapping state.
+        """
+
+        self.deleted = set()
+        self.overlay = IndexedMapping(self.parent.idx)
+
+    def commit(self):
+        """
+        Apply all changes in the overlay to the underlying mapping.
+        """
+
+        for key in self.deleted:
+            if key not in self.overlay:
+                del self.parent[key]
+
+        self.parent.update(self.overlay)
+        self.rollback()
+
+
+class IndexedMapping(MutableMapping):
+    """
+    Dictionary-style container that indexes some of the values' fields.
+
+    Values must conform to the Mapping interface so that they can be
+    indexed.  Not all indexed fields need to be present in every value.
+    """
+
+    __slots__ = ['data', 'idx']
+
+    def __init__(self, indexes=[]):
+        self.data = {}
+        self.idx = {i: {} for i in indexes}
+
+    def index(self, key, value):
+        for i, index in self.idx.iteritems():
+            if i in value:
+                index.setdefault(value[i], set()).add(key)
+
+    def unindex(self, key):
+        value = self.data[key]
+        for i, index in self.idx.iteritems():
+            if i in value:
+                iv = value[i]
+                index[iv].discard(key)
+                if not index[iv]:
+                    del index[iv]
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        if not isinstance(value, Mapping):
+            raise ValueError('IndexedMapping can only contain other mappings')
+
+        if key in self.data:
+            del self[key]
+
+        self.data[key] = value
+        self.index(key, value)
+
+    def __delitem__(self, key):
+        self.unindex(key)
+        del self.data[key]
+
+    def __contains__(self, key):
+        return key in self.data
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def lookup(self, name, value):
+        if name not in self.idx:
+            raise ValueError('missing index on %r' % (name,))
+
+        return self.idx[name].get(value, set())
+
+    def kwlookup(self, **fields):
+        result = None
+
+        for f, fv in fields.iteritems():
+            if result is None:
+                result = self.lookup(f, fv)
+            else:
+                result = result.intersection(self.lookup(f, fv))
+
+            if not result:
+                return result
+
+        return result or set(self)
+
+    def filter(self, **fields):
+        return {k: self.data[k] for k in self.kwlookup(**fields)}
 
 
 # vim:set sw=4 ts=4 et:

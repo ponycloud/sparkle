@@ -1,6 +1,20 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
+
+def desired_property_changed(old, new, prop):
+    if old.desired and new.desired:
+        return old.desired[prop] != new.desired[prop]
+    return False
+
+
+def need_to_withdraw_old(old, new, prop):
+    if old.desired and not new.desired:
+        return True
+
+    return desired_property_changed(old, new, prop)
+
+
 class Placement(object):
     """Encapsulates placement algorithms."""
 
@@ -22,110 +36,91 @@ class Placement(object):
 
 
     def on_host_changed(self, old, new):
-        """
-        By default, hosts are placed on "themselves" for "themselves".
-        """
-
         if new.desired:
+            # Host is configured, place it on itself.
             self.manager.bestow(new.pkey, new)
+
         else:
-            self.manager.withdraw(new.pkey, old)
+            # Host have lost it's configuration, withdraw it.
+            self.manager.withdraw(old.pkey, old)
+
+
+    def generic_host_child_handler(self, old, new):
+        if new.desired:
+            self.manager.bestow(new.desired['host'], new)
+
+        if need_to_withdraw_old(old, new, 'host'):
+            self.manager.withdraw(old.desired['host'], old)
 
 
     def on_nic_changed(self, old, new):
-        """
-        Place nic on it's respective host.
-        """
-
-        if new.desired:
-            host = new.desired['host']
-            self.manager.bestow(host, new)
-        elif old.desired:
-            self.manager.withdraw_all(old, old)
+        return self.generic_host_child_handler(old, new)
 
 
     def on_bond_changed(self, old, new):
-        """
-        Place bond on it's respective host.
-        """
-
-        if new.desired:
-            host = new.desired['host']
-            self.manager.bestow(host, new)
-        elif old.desired:
-            self.manager.withdraw_all(old, old)
+        return self.generic_host_child_handler(old, new)
 
 
     def on_nic_role_changed(self, old, new):
-        """
-        Place network role for a host matched through the role's bond.
-        """
-
         if new.desired:
-            bond = self.manager.model['bond'][new.desired['bond']]
+            bond = new.model['bond'][new.desired['bond']]
             self.manager.bestow(bond.desired['host'], new)
-        elif old.desired:
-            self.manager.withdraw_all(old, old)
 
-
-    def maybe_bestow_storage_pool(self, host_id, pool_id):
-        """
-        Determinine whenever the given host fullfilled requirements
-        (in terms of present disks) for the given storage pool.
-        """
-
-        # Get disks configured for the given storage pool.
-        disks = self.manager.model['disk'].list(storage_pool=pool_id)
-        disks = set([d.pkey for d in disks])
-
-        # Get disks actually present on a given host.
-        host_disks = self.manager.model['host_disk'].list(host=host_id)
-        host_disks = set([hd.current['disk'] for hd in host_disks])
-
-        # All the disks from the storage pool have to present.
-        if disks.issubset(host_disks):
-            storage_pool = ('storage_pool', pool_id)
-            host = ('host', host_id)
-            self.manager.bestow(host_id, storage_pool, host)
+        if need_to_withdraw_old(old, new, 'bond'):
+            bond = old.model['bond'][old.desired['bond']]
+            self.manager.withdraw(bond.desired['host'], old)
 
 
     def on_host_disk_changed(self, old, new):
-        """
-        Place configuration for actually present disks.
-        """
-
         if new.current:
-            host = new.current['host']
-            disk = ('disk', new.current['disk'])
-            self.manager.bestow(host, disk, new)
+            disk_id = new.current['disk']
+            if disk_id:
+                disk = new.model['disk'][disk_id]
+                host_id = new.current['host']
 
-            # Find storage pool for this host disk.
-            disk_row = self.manager.model['disk'].get(disk[1])
-            pool = disk_row and disk_row.desired['storage_pool']
+                self.manager.bestow(host_id, disk, new)
 
-            # We might have enough disks now, try place the pool.
-            if pool:
-                self.maybe_bestow_storage_pool(host, pool)
+                pool_id = disk.desired['storage_pool']
+                if pool_id:
+                    pool = new.model['storage_pool'][pool_id]
+                    self.maybe_bestow_storage_pool(host_id, pool)
 
         elif old.current:
-            host = old.current['host']
-            disk = ('disk', old.current['disk'])
-            self.manager.withdraw(host, disk, old)
+            disk_id = old.current['disk']
+            if disk_id:
+                disk = old.model['disk'].get(disk_id)
+                host_id = old.current['host']
 
-            # Find storage pool for this host disk.
-            disk_row = self.manager.model['disk'].get(disk[1])
-            pool = disk_row and disk_row.desired['storage_pool']
+                self.manager.withdraw(host_id, disk, old)
 
-            # Withdraw the storage pool since it's definitely not complete.
-            if pool:
-                pool = ('storage_pool', pool)
-                host = ('host', host)
-                self.manager.withdraw(host, pool, host)
+                pool_id = disk.desired['storage_pool']
+                if pool_id:
+                    self.manager.withdraw(host_id, ('storage_pool', pool_id))
+
+
+    def maybe_bestow_storage_pool(self, host_id, pool):
+        """
+        Determinine whether the given host can access all required disks
+        and if it can, bestow the storage pool.
+        """
+
+        # Get disks configured for the storage pool in question.
+        disks = pool.model['disk'].list_keys(storage_pool=pool.pkey)
+
+        # Get disks actually present on the specified host.
+        host_disks = self.manager.model['host_disk'].list_keys(host=host_id)
+        host_disks = set([k[1] for k in host_disks])
+
+        print 'disks = %r\nhost_disks = %r' % (disks, host_disks)
+
+        if disks.issubset(host_disks):
+            # All the disks from the storage pool are present...
+            self.manager.bestow(host_id, pool)
 
 
     def lookup_sp_hosts(self, pool):
         """
-        Looks up hosts that can see any disk from the given storage pool.
+        Look up hosts that can see any disk from the given storage pool.
         """
 
         hds = self.manager.model['host_disk'].list(storage_pool=pool)
@@ -133,17 +128,14 @@ class Placement(object):
 
 
     def on_storage_pool_changed(self, old, new):
-        """
-        Place storage pool on it's respective hosts.
-        """
-
-        # Lookup the hosts we're going to notify and check their eligibility.
         if new.desired:
-            for host in self.lookup_sp_hosts(new.pkey):
-                self.maybe_bestow_storage_pool(host, new.pkey)
+            hds = new.model['host_disk'].list_keys(storage_pool=new.pkey)
+
+            for host_id in set([hd[0] for hd in hds]):
+                self.maybe_bestow_storage_pool(host_id, new)
+
         elif old.desired:
-            for host in self.lookup_sp_hosts(old.pkey):
-                self.manager.withdraw(host, old, ('host', host))
+            self.manager.withdraw_all(old)
 
 
 # vim:set sw=4 ts=4 et:

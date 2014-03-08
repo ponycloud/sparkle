@@ -7,7 +7,7 @@ from twisted.internet import task, reactor
 from twisted.internet.threads import deferToThread
 from sqlalchemy.exc import OperationalError
 
-from sparkle.model import Model, Row
+from sparkle.model import Model, OverlayModel, Row
 from sparkle.schema import schema
 from sparkle.listener import DatabaseListener
 from sparkle.twilight import Twilight
@@ -32,13 +32,17 @@ class Manager(object):
         # This is where we keep the configuration and status data.
         self.model = Model()
 
+        # This is an overlay where we stage changes for notifications
+        # and placement purposes.
+        self.overlay = OverlayModel(self.model)
+
         # Create listener for applying changes in database.
         self.listener = DatabaseListener(self.db.engine.url)
         self.listener.add_callback(self.apply_changes)
 
         # This is how we notify users via websockets
         self.notifier = notifier
-        self.notifier.set_model(self.model)
+        self.notifier.set_model(self.overlay)
         self.notifier.start()
 
         # Map of hosts by their uuids so that we can maintain some
@@ -54,7 +58,7 @@ class Manager(object):
 
         # Watch for model updates to be forwarded to placement and
         # individual hosts.
-        self.model.add_callback(self.on_row_changed)
+        self.overlay.add_callback(self.on_row_changed)
 
 
     def start(self):
@@ -112,8 +116,8 @@ class Manager(object):
         # In case of success
         def success(data):
             print 'data successfully loaded'
-            self.model.load(data)
-            self.model.commit()
+            self.overlay.load(data)
+            self.overlay.commit()
 
             # Start processing database changes.
             self.listener.start()
@@ -124,8 +128,8 @@ class Manager(object):
 
     def apply_changes(self, changes):
         """Incorporate changes from database into the model."""
-        self.model.load(changes)
-        self.model.commit()
+        self.overlay.load(changes)
+        self.overlay.commit()
 
 
     def on_row_changed(self, old, new):
@@ -187,8 +191,8 @@ class Manager(object):
 
         if len(owners) == 0:
             name, pkey = row
-            if pkey in self.model[name]:
-                desired = self.model[name][pkey].desired
+            if pkey in self.overlay[name]:
+                desired = self.overlay[name][pkey].desired
                 if desired:
                     host.send_changes([(name, pkey, 'desired', desired)])
 
