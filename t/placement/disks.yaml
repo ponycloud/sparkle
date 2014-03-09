@@ -14,6 +14,10 @@ simple_disk_placement:
           - desired: {id: disk1, size: 1024, storage_pool: null}
           - desired: {id: disk2, size: 1024, storage_pool: null}
 
+      expect:
+        host1:
+          - [host, host1]
+
     - data:
         host_disk:
           - current: {host: host1, disk: disk1}
