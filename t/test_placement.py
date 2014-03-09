@@ -58,7 +58,7 @@ def make_test(name, test):
 
         for step in test.get('steps', []):
             changes = []
-            for tname, table in step.iteritems():
+            for tname, table in step.get('data', {}).iteritems():
                 for row in table:
                     for part in ('desired', 'current'):
                         if part in row:
@@ -72,16 +72,17 @@ def make_test(name, test):
             overlay.load(changes)
             overlay.commit()
 
-        for host in set(manager.placement).union(test.get('expect', {})):
-            items = test.get('expect', {}).get(host, [])
-            expected = set(tuple(row) for row in items)
-            placed = set(x[0] for x in manager.placement.get(host, set()))
+            if 'expect' in step:
+                for host in set(manager.placement).union(step['expect']):
+                    items = step['expect'].get(host, [])
+                    expected = set(tuple(row) for row in items)
+                    placed = set(x[0] for x in manager.placement.get(host, set()))
 
-            missing = expected.difference(placed)
-            unexpected = placed.difference(expected)
+                    missing = expected.difference(placed)
+                    unexpected = placed.difference(expected)
 
-            assert not missing, 'host %r: missing %r' % (host, missing)
-            assert not unexpected, 'host %r: unexpected %r' % (host, unexpected)
+                    assert not missing, 'host %r: missing %r' % (host, missing)
+                    assert not unexpected, 'host %r: unexpected %r' % (host, unexpected)
 
     test_runner.__name__ = 'test_' + name
     test_runner.__doc__ = test.get('about')
