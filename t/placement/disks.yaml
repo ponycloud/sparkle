@@ -1,0 +1,58 @@
+%YAML 1.2
+---
+simple_disk_placement:
+  about: |
+    Place two disks on a host based on the change of the respective
+    host_disk rows.  All participating rows exist.
+
+  steps:
+    - host:
+        - desired:
+            uuid: host1
+
+      disk:
+        - desired:
+            id: disk1
+            size: 1024
+            storage_pool: null
+
+        - desired:
+            id: disk2
+            size: 1024
+            storage_pool: null
+
+    - host_disk:
+        - current:
+            host: host1
+            disk: disk1
+        - current:
+            host: host1
+            disk: disk2
+
+  expect:
+    host1:
+      - [host, host1]
+      - [disk, disk1]
+      - [disk, disk2]
+
+
+minimal_disk_placement:
+  about: |
+    Place two disks on a host based on the change of the respective
+    host_disk rows.  The corresponding host and disk rows do not exist,
+    but the placement should work regardless.
+
+  steps:
+    - host_disk:
+        - current:
+            host: host1
+            disk: disk1
+        - current:
+            host: host1
+            disk: disk2
+
+  expect:
+    host1:
+      - [disk, disk1]
+      - [disk, disk2]
+
