@@ -73,25 +73,22 @@ class Placement(object):
 
     def on_host_disk_changed(self, old, new):
         if new.current:
-            disk_id = new.current['disk']
-            if disk_id:
-                disk = new.model['disk'][disk_id]
-                host_id = new.current['host']
+            host_id = new.current['host']
+            self.manager.bestow(host_id, ('disk', new.current['disk']), new)
+            disk = new.model['disk'].get(new.current['disk'])
 
-                self.manager.bestow(host_id, disk, new)
-
+            if disk:
                 pool_id = disk.desired['storage_pool']
                 if pool_id:
                     pool = new.model['storage_pool'][pool_id]
                     self.maybe_bestow_storage_pool(host_id, pool)
 
         elif old.current:
-            disk_id = old.current['disk']
-            if disk_id:
-                disk = old.model['disk'].get(disk_id)
-                host_id = old.current['host']
+            host_id = old.current['host']
+            self.manager.withdraw(host_id, ('disk', old.current['disk']), old)
+            disk = old.model['disk'].get(old.current['disk'])
 
-                self.manager.withdraw(host_id, disk, old)
+            if disk:
 
                 pool_id = disk.desired['storage_pool']
                 if pool_id:
