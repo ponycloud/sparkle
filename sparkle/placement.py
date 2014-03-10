@@ -108,8 +108,6 @@ class Placement(object):
         host_disks = pool.model['host_disk'].list_keys(host=host_id)
         host_disks = set([k[1] for k in host_disks])
 
-        print 'disks = %r\nhost_disks = %r' % (disks, host_disks)
-
         if disks.issubset(host_disks):
             # All the disks from the storage pool are present...
             self.manager.bestow(host_id, pool)
