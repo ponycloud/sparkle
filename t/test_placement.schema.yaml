@@ -1,0 +1,43 @@
+%YAML 1.2
+---
+type: object
+patternProperties:
+  .*:
+    type: object
+    additionalProperties: false
+    required: [steps]
+    properties:
+      about:
+        type: string
+
+      steps:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            update:
+              type: object
+              patternProperties:
+                .*:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      desired:
+                        type: object
+                      current:
+                        type: object
+
+            expect:
+              type: object
+              patternProperties:
+                .*:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: array
+                    minItems: 2
+                    maxItems: 2
+

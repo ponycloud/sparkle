@@ -5,6 +5,8 @@ import os.path
 import pytest
 import yaml
 
+import jsonschema
+
 from glob import glob
 from sparkle.placement import Placement
 from sparkle.model import Model, OverlayModel, Row
@@ -89,9 +91,15 @@ def make_test(name, test):
     return test_runner
 
 
+with open(__file__[:-3] + '.schema.yaml') as fp:
+    suite_schema = yaml.load(fp)
+
+
 for name in glob(os.path.dirname(__file__) + '/placement/*.yaml'):
     with open(name) as fp:
         suite = yaml.load(fp)
+
+    jsonschema.validate(suite, suite_schema)
 
     for name, test in suite.iteritems():
         runner = make_test(name, test)
