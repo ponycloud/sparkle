@@ -1,0 +1,77 @@
+%YAML 1.2
+---
+storage_pool_placement:
+  about: |
+    We provide all disks, their storage pool, host configuration and
+    expect the storage pool to be placed on the host along with the disks.
+
+  steps:
+    - update:
+        - [storage_pool, pool, desired, {uuid: pool}]
+        - [disk, disk1, desired, {id: disk1, storage_pool: pool, size: 1024}]
+        - [disk, disk2, desired, {id: disk2, storage_pool: pool, size: 1024}]
+        - [host, host1, desired, {uuid: host1}]
+        - [host, host2, desired, {uuid: host2}]
+
+      expect:
+        host1:
+          - [host, host1]
+
+        host2:
+          - [host, host2]
+
+    - update:
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [host_disk, [host2, disk1], current, {host: host2, disk: disk1}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk1]
+
+        host2:
+          - [host, host2]
+          - [disk, disk1]
+
+    - update:
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
+
+      expect:
+        host1: &full_host1
+          - [host, host1]
+          - [disk, disk1]
+          - [disk, disk2]
+          - [storage_pool, pool]
+
+        host2:
+          - [host, host2]
+          - [disk, disk1]
+
+    - update:
+        - [host_disk, [host1, disk1], current, null]
+        - [host_disk, [host2, disk2], current, {host: host2, disk: disk2}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk2]
+
+        host2: &host2_full
+          - [host, host2]
+          - [disk, disk1]
+          - [disk, disk2]
+          - [storage_pool, pool]
+
+    - update:
+        - [host_disk, [host1, disk2], current, null]
+        - [host, host1, desired, null]
+
+      expect:
+        host2: *host2_full
+
+    - update:
+        - [host_disk, [host2, disk1], current, null]
+        - [host_disk, [host2, disk2], current, null]
+        - [host, host2, desired, null]
+
+    - expect: {}
