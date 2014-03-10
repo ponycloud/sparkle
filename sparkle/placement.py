@@ -105,7 +105,7 @@ class Placement(object):
         disks = pool.model['disk'].list_keys(storage_pool=pool.pkey)
 
         # Get disks actually present on the specified host.
-        host_disks = self.manager.model['host_disk'].list_keys(host=host_id)
+        host_disks = pool.model['host_disk'].list_keys(host=host_id)
         host_disks = set([k[1] for k in host_disks])
 
         print 'disks = %r\nhost_disks = %r' % (disks, host_disks)
@@ -120,7 +120,7 @@ class Placement(object):
         Look up hosts that can see any disk from the given storage pool.
         """
 
-        hds = self.manager.model['host_disk'].list(storage_pool=pool)
+        hds = pool.model['host_disk'].list(storage_pool=pool)
         return set([hd.current['host'] for hd in hds])
 
 
