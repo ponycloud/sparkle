@@ -60,16 +60,12 @@ def make_test(name, test):
 
         for step in test.get('steps', []):
             changes = []
-            for tname, table in step.get('update', {}).iteritems():
-                for row in table:
-                    for part in ('desired', 'current'):
-                        if part in row:
-                            if isinstance(schema.tables[tname].pkey, basestring):
-                                pkey = row[part][schema.tables[tname].pkey]
-                            else:
-                                pkey = tuple(row[part][k] for k in schema.tables[tname].pkey)
 
-                            changes.append((tname, pkey, part, row[part]))
+            for name, pkey, state, part in step.get('update', []):
+                if isinstance(pkey, basestring):
+                    changes.append((name, pkey, state, part))
+                else:
+                    changes.append((name, tuple(pkey), state, part))
 
             overlay.load(changes)
             overlay.commit()

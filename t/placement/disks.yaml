@@ -7,27 +7,36 @@ simple_disk_placement:
 
   steps:
     - update:
-        host:
-          - desired: {uuid: host1}
-
-        disk:
-          - desired: {id: disk1, size: 1024, storage_pool: null}
-          - desired: {id: disk2, size: 1024, storage_pool: null}
+        - [host, host1, desired, {uuid: host1}]
+        - [disk, disk1, desired, {id: disk1, size: 1024, storage_pool: null}]
+        - [disk, disk2, desired, {id: disk2, size: 1024, storage_pool: null}]
 
       expect:
         host1:
           - [host, host1]
 
     - update:
-        host_disk:
-          - current: {host: host1, disk: disk1}
-          - current: {host: host1, disk: disk2}
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
 
       expect:
         host1:
           - [host, host1]
           - [disk, disk1]
           - [disk, disk2]
+
+    - update:
+        - [host_disk, [host1, disk1], current, null]
+        - [host_disk, [host1, disk2], current, null]
+
+      expect:
+        host1:
+          - [host, host1]
+
+    - update:
+        - [host, host1, desired, null]
+
+      expect: {}
 
 
 minimal_disk_placement:
@@ -38,12 +47,17 @@ minimal_disk_placement:
 
   steps:
     - update:
-        host_disk:
-          - current: {host: host1, disk: disk1}
-          - current: {host: host1, disk: disk2}
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
 
       expect:
         host1:
           - [disk, disk1]
           - [disk, disk2]
+
+    - update:
+        - [host_disk, [host1, disk1], current, null]
+        - [host_disk, [host1, disk2], current, null]
+
+      expect: {}
 

@@ -17,18 +17,24 @@ patternProperties:
           additionalProperties: false
           properties:
             update:
-              type: object
-              patternProperties:
-                .*:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: false
-                    properties:
-                      desired:
-                        type: object
-                      current:
-                        type: object
+              type: array
+              items:
+                type: array
+                items:
+                  - type: string
+                  - oneOf:
+                      - type: string
+                      - type: array
+                        items:
+                          type: string
+                  - type: string
+                    oneOf:
+                      - pattern: ^desired$
+                      - pattern: ^current$
+
+                  - oneOf:
+                      - type: object
+                      - type: 'null'
 
             expect:
               type: object
@@ -38,6 +44,7 @@ patternProperties:
                   uniqueItems: true
                   items:
                     type: array
-                    minItems: 2
-                    maxItems: 2
+                    items:
+                      - type: string
+                      - type: string
 
