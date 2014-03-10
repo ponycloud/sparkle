@@ -6,7 +6,7 @@ simple_disk_placement:
     host_disk rows.  All participating rows exist.
 
   steps:
-    - data:
+    - update:
         host:
           - desired: {uuid: host1}
 
@@ -18,7 +18,7 @@ simple_disk_placement:
         host1:
           - [host, host1]
 
-    - data:
+    - update:
         host_disk:
           - current: {host: host1, disk: disk1}
           - current: {host: host1, disk: disk2}
@@ -37,7 +37,7 @@ minimal_disk_placement:
     but the placement should work regardless.
 
   steps:
-    - data:
+    - update:
         host_disk:
           - current: {host: host1, disk: disk1}
           - current: {host: host1, disk: disk2}

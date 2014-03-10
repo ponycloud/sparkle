@@ -58,7 +58,7 @@ def make_test(name, test):
 
         for step in test.get('steps', []):
             changes = []
-            for tname, table in step.get('data', {}).iteritems():
+            for tname, table in step.get('update', {}).iteritems():
                 for row in table:
                     for part in ('desired', 'current'):
                         if part in row:
