@@ -8,11 +8,47 @@ def desired_property_changed(old, new, prop):
     return False
 
 
+def current_property_changed(old, new, prop):
+    if old.current and new.current:
+        return old.current[prop] != new.current[prop]
+    return False
+
+
 def need_to_withdraw_old(old, new, prop):
     if old.desired and not new.desired:
         return True
 
     return desired_property_changed(old, new, prop)
+
+
+def lookup_sp_hosts(model, pool_id):
+    """
+    Look up hosts that can see any disk from the given storage pool.
+    """
+
+    result = set()
+
+    for disk_id in model['disk'].list_keys(storage_pool=pool_id):
+        for hd in model['host_disk'].list_keys(disk=disk_id):
+            result.add(hd[0])
+
+    return result
+
+
+def lookup_host_storage_pools(model, host_id):
+    """
+    Look up storage pools that can be (at least partially) seen from the
+    specified host.
+    """
+
+    result = set()
+
+    for hd in model['host_disk'].list_keys(host=host_id):
+        disk = model['disk'].get(hd[1])
+        if disk and disk.get_desired('storage_pool'):
+            result.add(disk.desired['storage_pool'])
+
+    return result
 
 
 class Placement(object):
@@ -40,9 +76,13 @@ class Placement(object):
             # Host is configured, place it on itself.
             self.manager.bestow(new.pkey, new)
 
+            # TODO: Place all iSCSI storage pools on the host.
+
         else:
             # Host have lost it's configuration, withdraw it.
             self.manager.withdraw(old.pkey, old)
+
+            # TODO: Withdraw all iSCSI storage pools from the host.
 
 
     def generic_host_child_handler(self, old, new):
@@ -71,66 +111,76 @@ class Placement(object):
             self.manager.withdraw(bond.desired['host'], old)
 
 
+    def on_disk_changed(self, old, new):
+        if new.get_desired('storage_pool'):
+            pool = new.model['storage_pool'][new.desired['storage_pool']]
+            self.generic_storage_pool_placement(new.model, pool.pkey)
+
+        if old.get_desired('storage_pool'):
+            if desired_property_changed(old, new, 'storage_pool'):
+                pool_id = old.desired['storage_pool']
+                self.generic_storage_pool_placement(new.model, pool_id)
+
+
     def on_host_disk_changed(self, old, new):
         if new.current:
-            host_id = new.current['host']
-            self.manager.bestow(host_id, ('disk', new.current['disk']), new)
+            self.manager.bestow(new.pkey[0], ('disk', new.pkey[1]))
+
             disk = new.model['disk'].get(new.current['disk'])
-
             if disk:
                 pool_id = disk.desired['storage_pool']
                 if pool_id:
-                    pool = new.model['storage_pool'][pool_id]
-                    self.maybe_bestow_storage_pool(host_id, pool)
+                    self.generic_storage_pool_placement(new.model, pool_id)
 
-        elif old.current:
-            host_id = old.current['host']
-            self.manager.withdraw(host_id, ('disk', old.current['disk']), old)
+        if old.current:
+            self.manager.withdraw(old.pkey[0], ('disk', old.pkey[1]))
+
             disk = old.model['disk'].get(old.current['disk'])
-
             if disk:
-
                 pool_id = disk.desired['storage_pool']
                 if pool_id:
-                    self.manager.withdraw(host_id, ('storage_pool', pool_id))
+                    self.generic_storage_pool_placement(new.model, pool_id)
 
 
-    def maybe_bestow_storage_pool(self, host_id, pool):
+    def generic_storage_pool_placement(self, model, pool_id):
         """
-        Determinine whether the given host can access all required disks
-        and if it can, bestow the storage pool.
-        """
-
-        # Get disks configured for the storage pool in question.
-        disks = pool.model['disk'].list_keys(storage_pool=pool.pkey)
-
-        # Get disks actually present on the specified host.
-        host_disks = pool.model['host_disk'].list_keys(host=host_id)
-        host_disks = set([k[1] for k in host_disks])
-
-        if disks.issubset(host_disks):
-            # All the disks from the storage pool are present...
-            self.manager.bestow(host_id, pool)
-
-
-    def lookup_sp_hosts(self, pool):
-        """
-        Look up hosts that can see any disk from the given storage pool.
+        Place the pool on all hosts that can see at least one disk from the
+        pool and withdraw it from those that have it but can't.
         """
 
-        hds = pool.model['host_disk'].list(storage_pool=pool)
-        return set([hd.current['host'] for hd in hds])
+        # Get hosts than can see a portion of the storage pool.
+        sp_hosts = lookup_sp_hosts(model, pool_id)
+
+        # Get disks forming the storage pool.
+        sp_disks = model['disk'].list(storage_pool=pool_id)
+
+        # Try to retrieve the storage pool object.
+        pool = model['storage_pool'].get(pool_id)
+
+        if pool and pool.desired:
+            # Bestow the storage pool to those hosts.
+            for host_id in sp_hosts:
+                self.manager.bestow(host_id, pool)
+
+                # But also bring along all the storage pool disks.
+                for disk in sp_disks:
+                    self.manager.bestow(host_id, disk, pool)
+
+        # Now withdraw it from all other hosts.
+        for host_id in self.manager.rows.get(('storage_pool', pool_id), []):
+            pool_tuple = ('storage_pool', pool_id)
+
+            if host_id not in sp_hosts:
+                # Withdraw the storage pool.
+                self.manager.withdraw(host_id, pool_tuple)
+
+                # And once again, bring along the disks.
+                for disk in sp_disks:
+                    self.manager.withdraw(host_id, disk, pool_tuple)
 
 
     def on_storage_pool_changed(self, old, new):
-        if new.desired:
-            hds = new.model['host_disk'].list_keys(storage_pool=new.pkey)
-
-            for host_id in set([hd[0] for hd in hds]):
-                self.maybe_bestow_storage_pool(host_id, new)
-
-        elif old.desired:
-            self.manager.withdraw_all(old)
+        self.generic_storage_pool_placement(new.model, new.pkey)
 
 
 # vim:set sw=4 ts=4 et:

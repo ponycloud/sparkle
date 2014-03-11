@@ -6,6 +6,7 @@ storage_pool_placement:
     expect the storage pool to be placed on the host along with the disks.
 
   steps:
+    # Add everything except host disks.
     - update:
         - [storage_pool, pool, desired, {uuid: pool}]
         - [disk, disk1, desired, {id: disk1, storage_pool: pool, size: 1024}]
@@ -14,27 +15,17 @@ storage_pool_placement:
         - [host, host2, desired, {uuid: host2}]
 
       expect:
-        host1:
+        host1: &empty_host1
           - [host, host1]
 
-        host2:
+        host2: &empty_host2
           - [host, host2]
 
+    # Add some host disks, resulting in storage pools and all disks being
+    # placed on those hosts.
     - update:
         - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
         - [host_disk, [host2, disk1], current, {host: host2, disk: disk1}]
-
-      expect:
-        host1:
-          - [host, host1]
-          - [disk, disk1]
-
-        host2:
-          - [host, host2]
-          - [disk, disk1]
-
-    - update:
-        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
 
       expect:
         host1: &full_host1
@@ -43,35 +34,47 @@ storage_pool_placement:
           - [disk, disk2]
           - [storage_pool, pool]
 
-        host2:
-          - [host, host2]
-          - [disk, disk1]
-
-    - update:
-        - [host_disk, [host1, disk1], current, null]
-        - [host_disk, [host2, disk2], current, {host: host2, disk: disk2}]
-
-      expect:
-        host1:
-          - [host, host1]
-          - [disk, disk2]
-
-        host2: &host2_full
+        host2: &full_host2
           - [host, host2]
           - [disk, disk1]
           - [disk, disk2]
           - [storage_pool, pool]
 
+    # Add more host disks, observing that nothing have changed.
     - update:
-        - [host_disk, [host1, disk2], current, null]
-        - [host, host1, desired, null]
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
+        - [host_disk, [host2, disk2], current, {host: host2, disk: disk2}]
 
       expect:
-        host2: *host2_full
+        host1: *full_host1
+        host2: *full_host2
 
+    # Remove both hosts disks of a single host, resulting in that host
+    # losing both storage pool and disk configurations.
+    - update:
+        - [host_disk, [host1, disk1], current, null]
+        - [host_disk, [host1, disk2], current, null]
+
+      expect:
+        host1: *empty_host1
+        host2: *full_host2
+
+    # Remove all remaining host disks and host configurations, observing
+    # completely empty placement on both hosts, although the disks and
+    # storage pool still exist in the configuration.
     - update:
         - [host_disk, [host2, disk1], current, null]
         - [host_disk, [host2, disk2], current, null]
+        - [host, host1, desired, null]
         - [host, host2, desired, null]
+
+      expect: {}
+
+    # Just in case, clean up the hosts and storage pool and observe that we
+    # still have nothing placed.
+    - update:
+        - [disk, disk1, desired, null]
+        - [disk, disk2, desired, null]
+        - [storage_pool, pool, desired, null]
 
     - expect: {}
