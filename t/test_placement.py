@@ -17,6 +17,16 @@ class MockManager(object):
     def __init__(self):
         self.placement = {}
 
+    @property
+    def rows(self):
+        result = {}
+
+        for host, rows in self.placement.iteritems():
+            for row, owner in rows:
+                result.setdefault(row, set()).add(host)
+
+        return result
+
     def bestow(self, host, row, owner=None):
         if isinstance(row, Row):
             row = (row.table.name, row.pkey)
