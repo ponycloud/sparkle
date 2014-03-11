@@ -59,7 +59,7 @@ class MockManager(object):
             self.withdraw(host, row, owner)
 
 
-def make_test(name, test):
+def make_test(case, test):
     def test_runner():
         manager = MockManager()
         placement = Placement(manager)
@@ -68,7 +68,7 @@ def make_test(name, test):
 
         overlay.add_callback(placement.on_row_changed)
 
-        for step in test.get('steps', []):
+        for i, step in enumerate(test.get('steps', [])):
             changes = []
 
             for name, pkey, state, part in step.get('update', []):
@@ -89,10 +89,10 @@ def make_test(name, test):
                     missing = expected.difference(placed)
                     unexpected = placed.difference(expected)
 
-                    assert not missing, 'host %r: missing %r' % (host, missing)
-                    assert not unexpected, 'host %r: unexpected %r' % (host, unexpected)
+                    assert not missing, 'step %i: host %r: missing %r' % (i, host, list(missing))
+                    assert not unexpected, 'step %i: host %r: unexpected %r' % (i, host, list(unexpected))
 
-    test_runner.__name__ = 'test_' + name
+    test_runner.__name__ = 'test_' + case
     test_runner.__doc__ = test.get('about')
     return test_runner
 
