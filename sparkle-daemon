@@ -12,8 +12,8 @@ from sparkle.tzmq import Router
 import sqlsoup
 
 # Command line arguments follow the GNU conventions.
-from getopt import gnu_getopt
-from sys import argv
+from getopt import gnu_getopt, GetoptError
+from sys import argv, stderr, exit
 
 # Configuration is stored in a boring ini file.
 from ConfigParser import ConfigParser
@@ -74,7 +74,12 @@ if __name__ == '__main__':
         print 'sparkle (PonyCloud) 1'
 
     # Parse command line arguments.
-    opts, args = gnu_getopt(argv, 'hVc:', ['help', 'version', 'config='])
+    try:
+        opts, args = gnu_getopt(argv, 'hVc:', ['help', 'version', 'config='])
+    except GetoptError, e:
+        print >>stderr, e
+        print >>stderr, 'Try `sparkle-daemon --help` for more information.'
+        exit(1)
 
     action = do_start
     config_path = '/etc/cloud/sparkle.ini'
