@@ -372,9 +372,15 @@ def make_sparkle_app(manager):
             if member is None:
                 raise Unauthorized('you are not a member of the tenant')
 
+        # Bestow project owner role for alicorns
+        if user.desired.get('alicorn'):
+            role = 'owner'
+        else:
+            role = member.desired['role']
+
         return make_token_result({
             'tenant': tenant,
-            'role': member.desired['role']
+            'role': role
         })
 
     # Endpoint to dump the schema for clients to orient themselves.
