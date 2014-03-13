@@ -253,7 +253,7 @@ class Table(Mapping):
             if result is None:
                 result = subresult
             else:
-                result = result.intersect(subresult)
+                result = result.intersection(subresult)
 
         return result or set(self)
 
@@ -345,6 +345,17 @@ class Row(object):
             return default
 
         return self.desired.get(key, default)
+
+    def to_dict(self):
+        result = {}
+
+        if self.desired:
+            result['desired'] = dict(self.desired)
+
+        if self.current:
+            result['current'] = dict(self.current)
+
+        return result
 
 
 class OverlayMapping(MutableMapping):
