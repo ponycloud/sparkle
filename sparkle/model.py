@@ -291,6 +291,30 @@ class Row(object):
     def current(self):
         return self.table.model.current[self.table.name].get(self.pkey)
 
+    def check_filter(self, filter):
+        for key, value in filter.iteritems():
+            if self.get_desired(key, value) != value or \
+               self.get_current(key, value) != value:
+                return False
+        return True
+
+    def get_access(self):
+        access = set()
+
+        # Discard all endpoints that are tenant-specific.
+        for endpoint in self.table.schema.endpoints.itervalues():
+            if endpoint.access.startswith('tenant/') or \
+               endpoint.access.startswith('user/'):
+                continue
+
+            # Discard rows that doesn't match filter
+            if not self.check_filter(endpoint.filter):
+                continue
+
+            access.add(endpoint.access)
+
+        return access
+
     def get_tenants(self):
         """
         Return set of tenants that can access this row.
@@ -304,6 +328,10 @@ class Row(object):
         for endpoint in self.table.schema.endpoints.itervalues():
             # Discard all endpoints that are not tenant-specific.
             if not endpoint.access.startswith('tenant/'):
+                continue
+
+            # Discard rows that doesn't match filter.
+            if not self.check_filter(endpoint.filter):
                 continue
 
             # Traverse rows up to the tenant.

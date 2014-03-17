@@ -39,20 +39,19 @@ class Notifier(WampServerFactory):
                 'current':   new.current,
             }
 
-            allowed = old.get_tenants().union(new.get_tenants())
+            tenants = old.get_tenants().union(new.get_tenants())
 
-            # TODO: Send info about entities that would match
-            #       shared-access endpoints, such as public images.
+            # Publish event to all interested tenants.
+            for tenant in tenants:
+                self.publish(tenant, message)
 
-            if len(allowed) > 0:
-                # Publish event to all interested tenants.
-                for tenant in allowed:
-                    self.publish(tenant, message)
-            else:
-                # Publish event only to alicorns.
-                # NOTE: Due to the missing public entity notifications
-                #       alicorns now get notifications about them as well.
-                self.publish('alicorns', message)
+            # Publish to global channels according to access restrictions.
+            if not tenants:
+                for access in old.get_access().union(new.get_access()):
+                    if access == 'protected':
+                        self.publish('alicorns', message)
+                    elif access == 'shared':
+                        self.publish('public', message)
 
         self.model.add_callback(update_handler)
         reactor.listenTCP(self.port, self)
