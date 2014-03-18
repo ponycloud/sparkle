@@ -183,7 +183,14 @@ class OverlayModel(Model):
 
             changes.append((old, new))
 
-        callbacks = [callback(changes) for callback in self.callbacks]
+        callbacks = [c(changes) for c in self.callbacks]
+
+        for callback in callbacks:
+            if hasattr(callback, 'next'):
+                try:
+                    next(callback)
+                except StopIteration:
+                    pass
 
         for name in schema.tables:
             self.desired[name].commit()
@@ -191,7 +198,10 @@ class OverlayModel(Model):
 
         for callback in callbacks:
             if hasattr(callback, 'next'):
-                next(callback)
+                try:
+                    next(callback)
+                except StopIteration:
+                    pass
 
     def rollback(self):
         """

@@ -167,7 +167,7 @@ class Manager(object):
 
         # Flush the affected hosts.
         for host in hosts:
-            host.send_pending_changes()
+            self.hosts[host].send_pending_changes()
 
 
     def update_placement(self, hosts, name, pkey):
