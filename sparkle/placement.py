@@ -103,10 +103,6 @@ class Placement(object):
 
 
     def repair_disk(self, row):
-        # Do not waste time if the disk is not configured.
-        if not row.desired:
-            return
-
         # Place disk for every host_disk.
         for host_disk in row.m.host_disk.list(disk=row.pkey):
             for host in row.m.host.list(uuid=host_disk.c.host):
