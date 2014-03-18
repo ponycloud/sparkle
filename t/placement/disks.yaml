@@ -43,7 +43,7 @@ minimal_disk_placement:
   about: |
     Place two disks on a host based on the change of the respective
     host_disk rows.  The corresponding host and disk rows do not exist,
-    but the placement should work regardless.
+    so the placement should not work.
 
   steps:
     - update:
@@ -51,9 +51,7 @@ minimal_disk_placement:
         - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
 
       expect:
-        host1:
-          - [disk, disk1]
-          - [disk, disk2]
+        host1: []
 
     - update:
         - [host_disk, [host1, disk1], current, null]

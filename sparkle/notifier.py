@@ -30,28 +30,29 @@ class Notifier(WampServerFactory):
         Create hooks in model used for the distribution of notifications.
         """
 
-        def update_handler(old, new):
-            message = {
-                'type':      new.table.name,
-                'pkey_name': new.table.schema.pkey,
-                'pkey':      new.pkey,
-                'desired':   new.desired,
-                'current':   new.current,
-            }
+        def update_handler(changes):
+            for old, new in changes:
+                message = {
+                    'type':      new.table.name,
+                    'pkey_name': new.table.schema.pkey,
+                    'pkey':      new.pkey,
+                    'desired':   new.desired,
+                    'current':   new.current,
+                }
 
-            tenants = old.get_tenants().union(new.get_tenants())
+                tenants = old.get_tenants().union(new.get_tenants())
 
-            # Publish event to all interested tenants.
-            for tenant in tenants:
-                self.publish(tenant, message)
+                # Publish event to all interested tenants.
+                for tenant in tenants:
+                    self.publish(tenant, message)
 
-            # Publish to global channels according to access restrictions.
-            if not tenants:
-                for access in old.get_access().union(new.get_access()):
-                    if access == 'protected':
-                        self.publish('alicorns', message)
-                    elif access == 'shared':
-                        self.publish('public', message)
+                # Publish to global channels according to access restrictions.
+                if not tenants:
+                    for access in old.get_access().union(new.get_access()):
+                        if access == 'protected':
+                            self.publish('alicorns', message)
+                        elif access == 'shared':
+                            self.publish('public', message)
 
         self.model.add_callback(update_handler)
         reactor.listenTCP(self.port, self)

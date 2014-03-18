@@ -15,58 +15,52 @@ from sparkle.schema import schema
 
 class MockManager(object):
     def __init__(self):
-        self.placement = {}
+        self.hosts = {}
+        self.rows = {}
 
-    @property
-    def rows(self):
-        result = {}
+        self.model = Model()
+        self.overlay = OverlayModel(self.model)
+        self.overlay.add_callback(self.on_commit)
 
-        for host, rows in self.placement.iteritems():
-            for row, owner in rows:
-                result.setdefault(row, set()).add(host)
+        self.placement = Placement(self)
 
-        return result
+    def update_placement(self, hosts, name, pkey):
+        row = (name, pkey)
 
-    def bestow(self, host, row, owner=None):
-        if isinstance(row, Row):
-            row = (row.table.name, row.pkey)
+        removed = self.rows.setdefault(row, set()).difference(hosts)
+        self.rows[row] = hosts
 
-        if isinstance(owner, Row):
-            owner = (owner.table.name, owner.pkey)
+        if not hosts:
+            del self.rows[row]
 
-        if owner is None:
-            owner = row
+        for host in removed:
+            rows = self.hosts.setdefault(host, set())
+            rows.discard(row)
 
-        self.placement.setdefault(host, set()).add((row, owner))
+            if not rows:
+                del self.hosts[host]
 
-    def withdraw(self, host, row, owner=None):
-        if isinstance(row, Row):
-            row = (row.table.name, row.pkey)
+        for host in hosts:
+            rows = self.hosts.setdefault(host, set())
+            rows.add(row)
 
-        if isinstance(owner, Row):
-            owner = (owner.table.name, owner.pkey)
+    def on_commit(self, rows):
+        damaged = set()
+        hosts = set()
 
-        if owner is None:
-            owner = row
+        for old, new in rows:
+            for row in self.placement.damage(old):
+                damaged.add((row.table.name, row.pkey))
 
-        self.placement.setdefault(host, set()).discard((row, owner))
-
-        if not self.placement[host]:
-            del self.placement[host]
-
-    def withdraw_all(self, row, owner=None):
-        for host in self.placement:
-            self.withdraw(host, row, owner)
+        for name, pkey in damaged:
+            row = Row(self.overlay[name], pkey)
+            hosts = set(self.placement.repair(row))
+            self.update_placement(hosts, name, pkey)
 
 
 def make_test(case, test):
     def test_runner():
         manager = MockManager()
-        placement = Placement(manager)
-        model = Model()
-        overlay = OverlayModel(model)
-
-        overlay.add_callback(placement.on_row_changed)
 
         for i, step in enumerate(test.get('steps', [])):
             changes = []
@@ -77,14 +71,14 @@ def make_test(case, test):
                 else:
                     changes.append((name, tuple(pkey), state, part))
 
-            overlay.load(changes)
-            overlay.commit()
+            manager.overlay.load(changes)
+            manager.overlay.commit()
 
             if 'expect' in step:
-                for host in set(manager.placement).union(step['expect']):
+                for host in set(manager.hosts).union(step['expect']):
                     items = step['expect'].get(host, [])
                     expected = set(tuple(row) for row in items)
-                    placed = set(x[0] for x in manager.placement.get(host, set()))
+                    placed = manager.hosts.get(host, set())
 
                     missing = expected.difference(placed)
                     unexpected = placed.difference(expected)

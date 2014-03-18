@@ -58,7 +58,7 @@ class Manager(object):
 
         # Watch for model updates to be forwarded to placement and
         # individual hosts.
-        self.overlay.add_callback(self.on_row_changed)
+        self.overlay.add_callback(self.on_commit)
 
 
     def start(self):
@@ -132,124 +132,85 @@ class Manager(object):
         self.overlay.commit()
 
 
-    def on_row_changed(self, old, new):
-        """
-        Trigger placement algorithm and forward the change to hosts that
-        the row have been placed on.
-        """
-
-        # Update placement and possible send deletes out immediately.
-        self.placement.on_row_changed(old, new)
-
-        # When desired state changed, we need to send out updates to
-        # hosts that have the row placed on them.
-        if new.desired and new.desired != old.desired:
-            # Prepare the change in the usual format.
-            change = (new.table.name, new.pkey, 'desired', new.desired)
-
-            # Find what hosts should receive the update.
-            for host in self.rows.get((new.table.name, new.pkey), []):
-                if host in self.hosts:
-                    # Distribute the change to relevant hosts.
-                    self.hosts[host].send_changes([change])
-
-
     def receive(self, message, sender):
         if message['uuid'] not in self.hosts:
             self.hosts[message['uuid']] = Twilight(self, message['uuid'])
         self.hosts[message['uuid']].receive(message, sender)
 
 
-    def bestow(self, host, row, owner=None):
+    def on_commit(self, rows):
         """
-        Place selected row on a host with defined owner row.
-
-        It is possible to define both row and owner as a `(name, pkey)`
-        tuple instead.  Host can be either it's uuid or a Twilight instance.
+        Feed changed rows to the placement algorithm and adjust
+        placement for individual hosts.
         """
 
-        if owner is None:
-            owner = row
+        # Rows that need their placement repaired.
+        damaged = set()
 
-        if isinstance(host, basestring):
-            if host not in self.hosts:
-                self.hosts[host] = Twilight(self, host)
-            host = self.hosts[host]
+        # Affected hosts to be flushed after commit.
+        hosts = set()
 
-        if isinstance(row, Row):
-            row = (row.table.name, row.pkey)
+        # Damage all old rows and all rows that depend on them.
+        for old, new in rows:
+            for row in self.placement.damage(old):
+                damaged.add((row.table.name, row.pkey))
 
-        if isinstance(owner, Row):
-            owner = (owner.table.name, owner.pkey)
+        # Repair placement for all those rows using their new version in
+        # the model.
+        for name, pkey in damaged:
+            row = Row(self.overlay[name], pkey)
+            hosts = set(self.placement.repair(row))
+            self.update_placement(hosts, name, pkey)
+
+        # Let the commit proceed.
+        yield
+
+        # Flush the affected hosts.
+        for host in hosts:
+            host.send_pending_changes()
+
+
+    def update_placement(self, hosts, name, pkey):
+        """
+        Update placement of specified row.
+        """
+
+        old_hosts = self.rows.get((name, pkey), set())
+
+        for host in old_hosts.difference(hosts):
+            self.withdraw(host, name, pkey)
+
+        for host in hosts:
+            self.bestow(host, name, pkey)
+
+
+    def bestow(self, host, name, pkey):
+        if host not in self.hosts:
+            self.hosts[host] = Twilight(self, host)
+
+        row = (name, pkey)
+        host = self.hosts[host]
+        host.desired_state.add(row)
+        host.on_row_changed(name, pkey)
 
         hosts = self.rows.setdefault(row, set())
-        if host.uuid not in hosts:
-            print 'bestow %r to %s for %r' % (row, host.uuid, owner)
         hosts.add(host.uuid)
 
-        owners = host.desired_state.setdefault(row, set())
 
-        if len(owners) == 0:
-            name, pkey = row
-            if pkey in self.overlay[name]:
-                desired = self.overlay[name][pkey].desired
-                if desired:
-                    host.send_changes([(name, pkey, 'desired', desired)])
+    def withdraw(self, host, name, pkey):
+        if host not in self.hosts:
+            return
 
-        owners.add(owner)
+        row = (name, pkey)
 
-    def withdraw_all(self, row, owner=None):
-        """
-        Withdraw given row on all hosts for specified owner.
-
-        This function is ideal for situations where a row have
-        been completely deconfigured and should not appear anywhere.
-        We do not want to look up explicit hosts in that situation,
-        especially since row parents might have been deconfigured in
-        the same transaction.
-        """
-
-        if isinstance(row, Row):
-            row = (row.table.name, row.pkey)
-
-        for host in list(self.rows.get(row, ())):
-            self.withdraw(host, row, owner)
-
-    def withdraw(self, host, row, owner=None):
-        """
-        Remove row placement on given host for specified owner.
-
-        As with `bestow()` the host, row and owner can be supplied as
-        either identificators or corresponding objects.
-
-        Owner defaults to the row in question.
-        """
-
-        if owner is None:
-            owner = row
-
-        if isinstance(host, basestring):
-            host = self.hosts[host]
-
-        if isinstance(row, Row):
-            row = (row.table.name, row.pkey)
-
-        if isinstance(owner, Row):
-            owner = (owner.table.name, owner.pkey)
-
-        owners = host.desired_state.setdefault(row, set())
-        if owner in owners:
-            print 'withdraw %r from %s for %r' % (row, host.uuid, owner)
-        owners.discard(owner)
-
-        if 0 == len(owners):
-            del host.desired_state[row]
-            host.send_changes([(row[0], row[1], 'desired', None)])
+        host = self.hosts[host]
+        host.desired_state.discard(row)
+        host.on_row_changed(name, pkey)
 
         hosts = self.rows.setdefault(row, set())
         hosts.discard(host.uuid)
 
-        if 0 == len(hosts):
+        if not hosts:
             del self.rows[row]
 
 

@@ -2,55 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-def desired_property_changed(old, new, prop):
-    if old.desired and new.desired:
-        return old.desired[prop] != new.desired[prop]
-    return False
-
-
-def current_property_changed(old, new, prop):
-    if old.current and new.current:
-        return old.current[prop] != new.current[prop]
-    return False
-
-
-def need_to_withdraw_old(old, new, prop):
-    if old.desired and not new.desired:
-        return True
-
-    return desired_property_changed(old, new, prop)
-
-
-def lookup_sp_hosts(model, pool_id):
-    """
-    Look up hosts that can see any disk from the given storage pool.
-    """
-
-    result = set()
-
-    for disk_id in model['disk'].list_keys(storage_pool=pool_id):
-        for hd in model['host_disk'].list_keys(disk=disk_id):
-            result.add(hd[0])
-
-    return result
-
-
-def lookup_host_storage_pools(model, host_id):
-    """
-    Look up storage pools that can be (at least partially) seen from the
-    specified host.
-    """
-
-    result = set()
-
-    for hd in model['host_disk'].list_keys(host=host_id):
-        disk = model['disk'].get(hd[1])
-        if disk and disk.get_desired('storage_pool'):
-            result.add(disk.desired['storage_pool'])
-
-    return result
-
-
 class Placement(object):
     """Encapsulates placement algorithms."""
 
@@ -59,128 +10,127 @@ class Placement(object):
         self.manager = manager
 
 
-    def on_row_changed(self, old, new):
+    def damage(self, row):
         """
-        Triggered on every row change.
+        Map rows affected by update.
+
+        Must yield any and all rows affected by update of the given row.
+        The row itself must be included as well.
         """
 
-        handler = 'on_' + old.table.name + '_changed'
+        todo = [row]
+        done = set()
+
+        while len(todo):
+            row = todo.pop(0)
+            handler = 'damage_' + row.table.name
+
+            if hasattr(self, handler):
+                if (row.table.name, row.pkey) in done:
+                    continue
+
+                for sub in getattr(self, handler)(row):
+                    todo.append(sub)
+
+                done.add((row.table.name, row.pkey))
+            else:
+                print 'Placement.%s not found' % (handler,)
+
+            yield row
+
+
+    def repair(self, row):
+        """
+        Reconstruct placement of specified row.
+
+        Must yield any and all host uuids the row shall be bestowed to.
+        """
+
+        # Do not bother calculating anything if the row is not configured.
+        # We do not have any current-state-only placable rows.
+        if not row.desired:
+            return
+
+        handler = 'repair_' + row.table.name
+
         if hasattr(self, handler):
-            return getattr(self, handler)(old, new)
+            for sub in getattr(self, handler)(row):
+                yield sub
         else:
-            print 'no placement routine for %s' % (old.table.name,)
+            print 'Placement.%s not found' % (handler,)
 
 
-    def on_host_changed(self, old, new):
-        if new.desired:
-            # Host is configured, place it on itself.
-            self.manager.bestow(new.pkey, new)
+    def damage_host(self, row):
+        for nic in row.m.nic.list(host=row.pkey):
+            yield nic
 
-            # TODO: Place all iSCSI storage pools on the host.
+        for bond in row.m.bond.list(host=row.pkey):
+            yield bond
 
-        else:
-            # Host have lost it's configuration, withdraw it.
-            self.manager.withdraw(old.pkey, old)
-
-            # TODO: Withdraw all iSCSI storage pools from the host.
+        for host_disk in row.m.host_disk.list(host=row.pkey):
+            yield host_disk
 
 
-    def generic_host_child_handler(self, old, new):
-        if new.desired:
-            self.manager.bestow(new.desired['host'], new)
-
-        if need_to_withdraw_old(old, new, 'host'):
-            self.manager.withdraw(old.desired['host'], old)
+    def repair_host(self, row):
+        yield row.pkey
 
 
-    def on_nic_changed(self, old, new):
-        return self.generic_host_child_handler(old, new)
+    def damage_bond(self, row):
+        for nic_role in row.m.nic_role.list(bond=row.pkey):
+            yield nic_role
 
 
-    def on_bond_changed(self, old, new):
-        return self.generic_host_child_handler(old, new)
+    def repair_bond(self, row):
+        yield row.d.host
 
 
-    def on_nic_role_changed(self, old, new):
-        if new.desired:
-            bond = new.model['bond'][new.desired['bond']]
-            self.manager.bestow(bond.desired['host'], new)
-
-        if need_to_withdraw_old(old, new, 'bond'):
-            bond = old.model['bond'][old.desired['bond']]
-            self.manager.withdraw(bond.desired['host'], old)
+    def repair_nic(self, row):
+        yield row.d.host
 
 
-    def on_disk_changed(self, old, new):
-        if new.get_desired('storage_pool'):
-            pool = new.model['storage_pool'][new.desired['storage_pool']]
-            self.generic_storage_pool_placement(new.model, pool.pkey)
-
-        if old.get_desired('storage_pool'):
-            if desired_property_changed(old, new, 'storage_pool'):
-                pool_id = old.desired['storage_pool']
-                self.generic_storage_pool_placement(new.model, pool_id)
+    def repair_nic_role(self, row):
+        yield row.m.bond[row.d.bond].d.host
 
 
-    def on_host_disk_changed(self, old, new):
-        if new.current:
-            self.manager.bestow(new.pkey[0], ('disk', new.pkey[1]))
-
-            disk = new.model['disk'].get(new.current['disk'])
-            if disk:
-                pool_id = disk.desired['storage_pool']
-                if pool_id:
-                    self.generic_storage_pool_placement(new.model, pool_id)
-
-        if old.current:
-            self.manager.withdraw(old.pkey[0], ('disk', old.pkey[1]))
-
-            disk = old.model['disk'].get(old.current['disk'])
-            if disk:
-                pool_id = disk.desired['storage_pool']
-                if pool_id:
-                    self.generic_storage_pool_placement(new.model, pool_id)
+    def damage_host_disk(self, row):
+        for disk in row.m.disk.list(id=row.c.disk):
+            yield disk
 
 
-    def generic_storage_pool_placement(self, model, pool_id):
-        """
-        Place the pool on all hosts that can see at least one disk from the
-        pool and withdraw it from those that have it but can't.
-        """
-
-        # Get hosts than can see a portion of the storage pool.
-        sp_hosts = lookup_sp_hosts(model, pool_id)
-
-        # Get disks forming the storage pool.
-        sp_disks = model['disk'].list(storage_pool=pool_id)
-
-        # Try to retrieve the storage pool object.
-        pool = model['storage_pool'].get(pool_id)
-
-        if pool and pool.desired:
-            # Bestow the storage pool to those hosts.
-            for host_id in sp_hosts:
-                self.manager.bestow(host_id, pool)
-
-                # But also bring along all the storage pool disks.
-                for disk in sp_disks:
-                    self.manager.bestow(host_id, disk, pool)
-
-        # Now withdraw it from all other hosts.
-        for host_id in self.manager.rows.get(('storage_pool', pool_id), []):
-            pool_tuple = ('storage_pool', pool_id)
-
-            if host_id not in sp_hosts:
-                # Withdraw the storage pool.
-                self.manager.withdraw(host_id, pool_tuple)
-
-                # And once again, bring along the disks.
-                for disk in sp_disks:
-                    self.manager.withdraw(host_id, disk, pool_tuple)
+    def damage_disk(self, row):
+        if row.d.storage_pool:
+            yield row.m.storage_pool[row.d.storage_pool]
 
 
-    def on_storage_pool_changed(self, old, new):
-        self.generic_storage_pool_placement(new.model, new.pkey)
+    def repair_disk(self, row):
+        # Do not waste time if the disk is not configured.
+        if not row.desired:
+            return
+
+        # Place disk for every host_disk.
+        for host_disk in row.m.host_disk.list(disk=row.pkey):
+            for host in row.m.host.list(uuid=host_disk.c.host):
+                yield host.pkey
+
+        # Also place the disk to hosts that can see at least part of
+        # disk's storage pool via *some* host_disk.
+        for disk in row.m.disk.list(storage_pool=row.d.storage_pool):
+            for host_disk in row.m.host_disk.list(disk=row.pkey):
+                for host in row.m.host.list(uuid=host_disk.c.host):
+                    yield host.pkey
+
+
+    def damage_storage_pool(self, row):
+        for disk in row.m.disk.list(storage_pool=row.pkey):
+            yield disk
+
+
+    def repair_storage_pool(self, row):
+        # Place storage pool on all hosts that can see at least a part of it.
+        for disk in row.m.disk.list(storage_pool=row.pkey):
+            for host_disk in row.m.host_disk.list(disk=disk.pkey):
+                for host in row.m.host.list(uuid=host_disk.c.host):
+                    yield host.pkey
 
 
 # vim:set sw=4 ts=4 et:

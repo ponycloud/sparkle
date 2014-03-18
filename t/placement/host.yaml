@@ -1,0 +1,19 @@
+%YAML 1.2
+---
+host_placement:
+  about: |
+    The very basic placement test.  Place host on itself.
+
+  steps:
+    - update:
+        - [host, host1, desired, {uuid: host1}]
+
+      expect:
+        host1:
+          - [host, host1]
+
+    - update:
+        - [host, host1, desired, null]
+
+      expect: {}
+

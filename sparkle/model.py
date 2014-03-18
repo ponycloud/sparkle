@@ -35,6 +35,9 @@ class Model(Mapping):
     def __getitem__(self, key):
         return Table(self, key)
 
+    def __getattr__(self, name):
+        return self[name]
+
     def __iter__(self):
         return iter(schema.tables)
 
@@ -131,8 +134,12 @@ class OverlayModel(Model):
 
     def add_callback(self, cb):
         """
-        Add callback function that will be called with old and new row
-        right before the changes staged in the overlay are committed.
+        Add callback function that will be called with overview of all
+        transaction changes in the form of old and new row tuples right
+        before the changes staged in the overlay are committed.
+
+        The function can yield to wait for the transaction to proceed and
+        then continue after the transaction have completed.
         """
 
         self.callbacks.add(cb)
@@ -161,6 +168,8 @@ class OverlayModel(Model):
             for key in self.current[name].overlay:
                 modified.add((name, key))
 
+        changes = []
+
         for name, key in modified:
             if key in self.parent[name]:
                 old = self.parent[name][key]
@@ -172,12 +181,17 @@ class OverlayModel(Model):
             else:
                 new = Row(self[name], key)
 
-            for callback in self.callbacks:
-                callback(old, new)
+            changes.append((old, new))
+
+        callbacks = [callback(changes) for callback in self.callbacks]
 
         for name in schema.tables:
             self.desired[name].commit()
             self.current[name].commit()
+
+        for callback in callbacks:
+            if hasattr(callback, 'next'):
+                next(callback)
 
     def rollback(self):
         """
@@ -187,6 +201,23 @@ class OverlayModel(Model):
         for name in schema.tables:
             self.desired[name].rollback()
             self.current[name].rollback()
+
+
+class Part(object):
+    """
+    Read-only getattr wrapper for current/desired state data.
+    """
+
+    __slots__ = ['data']
+
+    def __init__(self, data):
+        self.data = data
+
+    def __getattr__(self, name):
+        if self.data is None:
+            return None
+
+        return self.data.get(name)
 
 
 class Table(Mapping):
@@ -215,8 +246,13 @@ class Table(Mapping):
     def desired(self):
         return self.model.desired[self.name]
 
+    @property
+    def m(self):
+        return self.model
+
     def __getitem__(self, key):
-        if key not in self.desired and key not in self.current:
+        if key not in (self.desired or {}) and \
+           key not in (self.current or {}):
             raise KeyError(key)
 
         return Row(self, key)
@@ -283,13 +319,23 @@ class Row(object):
     def model(self):
         return self.table.model
 
+    m = model
+
     @property
     def desired(self):
         return self.table.model.desired[self.table.name].get(self.pkey)
 
     @property
+    def d(self):
+        return Part(self.desired)
+
+    @property
     def current(self):
         return self.table.model.current[self.table.name].get(self.pkey)
+
+    @property
+    def c(self):
+        return Part(self.current)
 
     def check_filter(self, filter):
         for key, value in filter.iteritems():
@@ -349,8 +395,11 @@ class Row(object):
                 if key is None:
                     break
 
-                row = row.table.model[mnt.parent.table.name][key]
+                row = row.table.model[mnt.parent.table.name].get(key)
                 mnt = mnt.parent
+
+                if row is None:
+                    break
 
         return tenants
 

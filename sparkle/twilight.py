@@ -35,13 +35,39 @@ class Twilight(object):
         self.current_state = set()
 
         # Desired state rows we have been assigned from the placement
-        # algorithm via the manager.  Every assigned `(name, pkey)`
-        # tuple points to a set of owners that caused the placement.
-        self.desired_state = {}
+        # algorithm via the manager.  Set of assigned `(name, pkey)` pairs.
+        self.desired_state = set()
+
+        # New changes to the desired state that have not yet been
+        # send to the peer.  Used to send changes per-transaction.
+        self.pending_changes = set()
 
         # Send keep-alive message every few seconds.
         self.keep_alive = task.LoopingCall(self.send_changes, [])
         self.keep_alive.start(15.0)
+
+
+    def on_row_changed(self, name, pkey):
+        """Called to notify us about a changed row."""
+        self.pending_changes.add((name, pkey))
+
+
+    def send_pending_changes(self):
+        """
+        Send any pending changes in one transaction.
+        """
+
+        changes = []
+
+        for name, pkey in self.pending_changes:
+            if (name, pkey) in self.desired_state:
+                desired = self.manager.model[name][pkey].desired
+                changes.append((name, pkey, 'desired', desired))
+            else:
+                changes.append((name, pkey, 'desired', None))
+
+        self.pending_changes.clear()
+        self.send_changes(changes)
 
 
     def send(self, message):
