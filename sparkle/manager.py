@@ -155,15 +155,15 @@ class Manager(object):
             for row in self.placement.damage(old):
                 damaged.add((row.table.name, row.pkey))
 
+        # Let the commit proceed.
+        yield
+
         # Repair placement for all those rows using their new version in
         # the model.
         for name, pkey in damaged:
-            row = Row(self.overlay[name], pkey)
+            row = Row(self.model[name], pkey)
             hosts = set(self.placement.repair(row))
             self.update_placement(hosts, name, pkey)
-
-        # Let the commit proceed.
-        yield
 
         # Flush the affected hosts.
         for host in hosts:
