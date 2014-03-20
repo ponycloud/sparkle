@@ -48,3 +48,5 @@ patternProperties:
                       - type: string
                       - type: string
 
+
+# vim:set sw=2 ts=2 et:

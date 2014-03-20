@@ -78,3 +78,6 @@ storage_pool_placement:
         - [storage_pool, pool, desired, null]
 
     - expect: {}
+
+
+# vim:set sw=2 ts=2 et:
