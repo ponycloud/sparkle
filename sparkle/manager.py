@@ -158,12 +158,22 @@ class Manager(object):
         # Let the commit proceed.
         yield
 
+        # Create set of changed rows for faster lookup below when we
+        # decide whether to send them out or not.
+        modified = set(tuple(row[:2]) for row in rows)
+
         # Repair placement for all those rows using their new version in
         # the model.
         for name, pkey in damaged:
             row = Row(self.model[name], pkey)
-            hosts = set(self.placement.repair(row))
-            self.update_placement(hosts, name, pkey)
+            row_hosts = set(self.placement.repair(row))
+            self.update_placement(row_hosts, name, pkey)
+            hosts.update(row_hosts)
+
+            # Notify hosts about actually modified rows only.
+            if (name, pkey) in modified:
+                for host in row_hosts:
+                    self.hosts[host].on_row_changed(name, pkey)
 
         # Flush the affected hosts.
         for host in hosts:
@@ -191,7 +201,6 @@ class Manager(object):
         row = (name, pkey)
         host = self.hosts[host]
         host.desired_state.add(row)
-        host.on_row_changed(name, pkey)
 
         hosts = self.rows.setdefault(row, set())
         hosts.add(host.uuid)
@@ -205,7 +214,6 @@ class Manager(object):
 
         host = self.hosts[host]
         host.desired_state.discard(row)
-        host.on_row_changed(name, pkey)
 
         hosts = self.rows.setdefault(row, set())
         hosts.discard(host.uuid)
