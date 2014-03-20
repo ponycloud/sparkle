@@ -67,7 +67,9 @@ class Twilight(object):
                 changes.append((name, pkey, 'desired', None))
 
         self.pending_changes.clear()
-        self.send_changes(changes)
+
+        if changes:
+            self.send_changes(changes)
 
 
     def send(self, message):
