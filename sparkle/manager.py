@@ -193,6 +193,9 @@ class Manager(object):
         for host in hosts:
             self.bestow(host, name, pkey)
 
+        for host in old_hosts.symmetric_difference(hosts):
+            self.hosts[host].on_row_changed(name, pkey)
+
 
     def bestow(self, host, name, pkey):
         if host not in self.hosts:
