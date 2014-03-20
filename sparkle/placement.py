@@ -81,15 +81,19 @@ class Placement(object):
 
 
     def repair_bond(self, row):
-        yield row.d.host
+        if row.m.host[row.d.host].d.state != 'evacuated':
+            yield row.d.host
 
 
     def repair_nic(self, row):
-        yield row.d.host
+        if row.m.host[row.d.host].d.state != 'evacuated':
+            yield row.d.host
 
 
     def repair_nic_role(self, row):
-        yield row.m.bond[row.d.bond].d.host
+        bond = row.m.bond[row.d.bond]
+        if bond.m.host[bond.d.host].d.state != 'evacuated':
+            yield bond.d.host
 
 
     def damage_host_disk(self, row):
@@ -106,14 +110,16 @@ class Placement(object):
         # Place disk for every host_disk.
         for host_disk in row.m.host_disk.list(disk=row.pkey):
             for host in row.m.host.list(uuid=host_disk.c.host):
-                yield host.pkey
+                if host.d.state != 'evacuated':
+                    yield host.pkey
 
         # Also place the disk to hosts that can see at least part of
         # disk's storage pool via *some* host_disk.
         for disk in row.m.disk.list(storage_pool=row.d.storage_pool):
             for host_disk in row.m.host_disk.list(disk=row.pkey):
                 for host in row.m.host.list(uuid=host_disk.c.host):
-                    yield host.pkey
+                    if host.d.state != 'evacuated':
+                        yield host.pkey
 
 
     def damage_storage_pool(self, row):
@@ -126,7 +132,8 @@ class Placement(object):
         for disk in row.m.disk.list(storage_pool=row.pkey):
             for host_disk in row.m.host_disk.list(disk=disk.pkey):
                 for host in row.m.host.list(uuid=host_disk.c.host):
-                    yield host.pkey
+                    if host.d.state != 'evacuated':
+                        yield host.pkey
 
 
 # vim:set sw=4 ts=4 et:

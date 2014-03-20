@@ -60,4 +60,38 @@ minimal_disk_placement:
       expect: {}
 
 
+no_host_disk_placement:
+  about: |
+    Place two disks on a non-existent host.  Since the host
+    does not exist, this test should not work.
+
+  steps:
+    - update:
+        - [disk, disk1, desired, {id: disk1, size: 1024, storage_pool: null}]
+        - [disk, disk2, desired, {id: disk2, size: 1024, storage_pool: null}]
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
+
+    - expect:
+        host1: []
+
+
+evacuated_host_disk_placement:
+  about: |
+    Place two disks on a non-existent host.  Since the host
+    does not exist, this test should not work.
+
+  steps:
+    - update:
+        - [host, host1, desired, {uuid: host1, state: evacuated}]
+        - [disk, disk1, desired, {id: disk1, size: 1024, storage_pool: null}]
+        - [disk, disk2, desired, {id: disk2, size: 1024, storage_pool: null}]
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [host_disk, [host1, disk2], current, {host: host1, disk: disk2}]
+
+    - expect:
+        host1:
+          - [host, host1]
+
+
 # vim:set sw=2 ts=2 et:
