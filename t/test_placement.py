@@ -13,6 +13,11 @@ from sparkle.model import Model, OverlayModel, Row
 from sparkle.schema import schema
 
 
+class MockHost(object):
+    def __init__(self):
+        self.desired = {}
+
+
 class MockManager(object):
     def __init__(self):
         self.hosts = {}
@@ -27,22 +32,21 @@ class MockManager(object):
     def update_placement(self, hosts, name, pkey):
         row = (name, pkey)
 
-        removed = self.rows.setdefault(row, set()).difference(hosts)
+        for host in self.rows.get(row, set()).difference(set(hosts)):
+            host = self.hosts.setdefault(host, MockHost())
+            host.desired.setdefault(name, set()).discard(pkey)
+
+            if not host.desired[name]:
+                del host.desired[name]
+
         self.rows[row] = hosts
 
         if not hosts:
             del self.rows[row]
 
-        for host in removed:
-            rows = self.hosts.setdefault(host, set())
-            rows.discard(row)
-
-            if not rows:
-                del self.hosts[host]
-
         for host in hosts:
-            rows = self.hosts.setdefault(host, set())
-            rows.add(row)
+            host = self.hosts.setdefault(host, MockHost())
+            host.desired.setdefault(name, set()).add(pkey)
 
     def on_commit(self, rows):
         damaged = set()
@@ -52,9 +56,10 @@ class MockManager(object):
             for row in self.placement.damage(old):
                 damaged.add((row.table.name, row.pkey))
 
+        yield
+
         for name, pkey in damaged:
-            row = Row(self.overlay[name], pkey)
-            hosts = set(self.placement.repair(row))
+            hosts = set(self.placement.repair(Row(self.model[name], pkey)))
             self.update_placement(hosts, name, pkey)
 
 
@@ -78,7 +83,11 @@ def make_test(case, test):
                 for host in set(manager.hosts).union(step['expect']):
                     items = step['expect'].get(host, [])
                     expected = set(tuple(row) for row in items)
-                    placed = manager.hosts.get(host, set())
+                    desired = manager.hosts.get(host, MockHost()).desired
+                    placed = set()
+                    for name, pkeys in desired.iteritems():
+                        for pkey in pkeys:
+                            placed.add((name, pkey))
 
                     missing = expected.difference(placed)
                     unexpected = placed.difference(expected)

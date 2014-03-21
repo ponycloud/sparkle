@@ -32,15 +32,16 @@ class Twilight(object):
 
         # Current state rows we have inserted into the model because
         # client have sent them to us.
-        self.current_state = set()
+        self.current = set()
 
         # Desired state rows we have been assigned from the placement
-        # algorithm via the manager.  Set of assigned `(name, pkey)` pairs.
-        self.desired_state = set()
+        # algorithm via the manager.  Dictionary of tables with sets
+        # of assigned row primary keys.
+        self.desired = {}
 
         # New changes to the desired state that have not yet been
         # send to the peer.  Used to send changes per-transaction.
-        self.pending_changes = set()
+        self.pending = set()
 
         # Send keep-alive message every few seconds.
         self.keep_alive = task.LoopingCall(self.send_changes, [])
@@ -49,7 +50,7 @@ class Twilight(object):
 
     def on_row_changed(self, name, pkey):
         """Called to notify us about a changed row."""
-        self.pending_changes.add((name, pkey))
+        self.pending.add((name, pkey))
 
 
     def send_pending_changes(self):
@@ -59,14 +60,14 @@ class Twilight(object):
 
         changes = []
 
-        for name, pkey in self.pending_changes:
-            if (name, pkey) in self.desired_state:
+        for name, pkey in self.pending:
+            if pkey in self.desired.get(name, set()):
                 desired = self.manager.model[name][pkey].desired
                 changes.append((name, pkey, 'desired', desired))
             else:
                 changes.append((name, pkey, 'desired', None))
 
-        self.pending_changes.clear()
+        self.pending.clear()
 
         if changes:
             self.send_changes(changes)
@@ -124,10 +125,11 @@ class Twilight(object):
         self.local_sequence = 0
 
         changes = []
-        for name, pkey in self.desired_state:
-            if pkey in self.manager.model[name]:
-                part = self.manager.model[name][pkey].desired
-                changes.append((name, pkey, 'desired', part))
+        for name, pkeys in self.desired.iteritems():
+            for pkey in pkeys:
+                if pkey in self.manager.model[name]:
+                    part = self.manager.model[name][pkey].desired
+                    changes.append((name, pkey, 'desired', part))
 
         self.send_changes(changes)
 
@@ -145,7 +147,7 @@ class Twilight(object):
             self.remote_incarnation = message['incarnation']
             self.remote_sequence = 1
             changes = list(self.iter_valid_changes(message['changes']))
-            self.replace_current_state(changes)
+            self.replace_current(changes)
             return
 
         if message['incarnation'] != self.remote_incarnation:
@@ -160,7 +162,7 @@ class Twilight(object):
             return
 
         changes = list(self.iter_valid_changes(message['changes']))
-        self.merge_current_state(changes)
+        self.merge_current(changes)
         self.remote_sequence += 1
 
 
@@ -230,7 +232,7 @@ class Twilight(object):
                             % (self.uuid, change)
 
 
-    def merge_current_state(self, changes):
+    def merge_current(self, changes):
         """
         Load specified changes to the model and track what rows we own.
         """
@@ -238,36 +240,36 @@ class Twilight(object):
         # Record the ownership information.
         for name, pkey, state, part in changes:
             if part is None:
-                self.current_state.discard((name, pkey))
+                self.current.discard((name, pkey))
             else:
-                self.current_state.add((name, pkey))
+                self.current.add((name, pkey))
 
         # Load the changes into the model in one go.
         self.manager.overlay.load(changes)
         self.manager.overlay.commit()
 
 
-    def replace_current_state(self, changes):
+    def replace_current(self, changes):
         """
         Merge specified changes to the model and remove our rows not found
         in this update.  Attempts to minimize changes to the model in order
         to prevent platform disruption due to large placement changes.
 
-        Row ownership is updated the same way ``merge_current_state`` does.
+        Row ownership is updated the same way ``merge_current`` does.
         """
 
         # Determine what rows will be deleted during the update due to
         # them not being mentioned in the replacement changeset.
         update_rows = set([tuple(change[:2]) for change in changes])
-        delete_rows = self.current_state.difference(update_rows)
+        delete_rows = self.current.difference(update_rows)
         delete_changes = [(name, pkey, 'current', None) \
                           for name, pkey in delete_rows]
 
         # Record the ownership information.
-        self.current_state = update_rows
+        self.current = update_rows
         for name, pkey, state, part in changes:
             if part is None:
-                self.current_state.discard((name, pkey))
+                self.current.discard((name, pkey))
 
         # Load the changes into the model in one go.
         self.manager.overlay.load(changes + delete_changes)

@@ -201,11 +201,10 @@ class Manager(object):
         if host not in self.hosts:
             self.hosts[host] = Twilight(self, host)
 
-        row = (name, pkey)
         host = self.hosts[host]
-        host.desired_state.add(row)
+        host.desired.setdefault(name, set()).add(pkey)
 
-        hosts = self.rows.setdefault(row, set())
+        hosts = self.rows.setdefault((name, pkey), set())
         hosts.add(host.uuid)
 
 
@@ -216,13 +215,16 @@ class Manager(object):
         row = (name, pkey)
 
         host = self.hosts[host]
-        host.desired_state.discard(row)
+        host.desired.setdefault(name, set()).discard(row)
 
         hosts = self.rows.setdefault(row, set())
         hosts.discard(host.uuid)
 
         if not hosts:
             del self.rows[row]
+
+        if not host.desired[name]:
+            del host.desired[name]
 
 
     def list_collection(self, path, keys):
