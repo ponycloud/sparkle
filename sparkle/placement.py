@@ -70,6 +70,13 @@ class Placement(object):
         for host_disk in row.m.host_disk.list(host=row.pkey):
             yield host_disk
 
+        # Abuse information about current placement of the volumes.
+        if row.pkey in self.manager.hosts:
+            host = self.manager.hosts[row.pkey]
+            volumes = host.desired.get('volume', set())
+            for volume in volumes:
+                yield row.m.volume[volume]
+
 
     def repair_host(self, row):
         yield row.pkey
@@ -134,6 +141,45 @@ class Placement(object):
                 for host in row.m.host.list(uuid=host_disk.c.host):
                     if host.d.state != 'evacuated':
                         yield host.pkey
+
+
+    def damage_volume(self, row):
+        for extent in row.m.extent.list(volume=row.pkey):
+            yield extent
+
+        if row.d.image:
+            yield row.m.image[row.d.image]
+
+
+    def damage_image(self, row):
+        for volume in row.m.volume.list(base_image=row.pkey):
+            yield volume
+
+
+    def damage_host_storage_pool(self, row):
+        if row.c.host in self.manager.hosts:
+            host = self.manager.hosts[row.c.host]
+            h_volumes = host.desired.get('volume', set())
+            for volume in h_volumes:
+                yield row.m.volume[volume]
+
+        # This could have been written in a simple way,
+        # but we expect to have a whole lot of volumes and it would
+        # not be very wise to iterate over them every time a host
+        # tells us about a minor change of a storage pool.
+        allv = row.m.volume.list_keys(storage_pool=row.c.storage_pool)
+        spdv = row.m.volume.list_keys(storage_pool=row.c.storage_pool,
+                                      state='deleted')
+        nonbiv = row.m.volume.list_keys(storage_pool=row.c.storage_pool,
+                                        base_image=None)
+
+        # Damage volumes that are currently not placed
+        # and are to be deleted or initialized.
+        sp_volumes = allv.difference(nonbiv).union(spdv)
+
+        for volume in sp_volumes:
+            if not self.manager.rows.get(('volume', volume), set()):
+                yield row.m.volume[volume]
 
 
 # vim:set sw=4 ts=4 et:

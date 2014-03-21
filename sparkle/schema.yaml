@@ -252,6 +252,7 @@ vnic:
 
 volume:
   pkey: uuid
+  index: [base_image, state]
   mount:
     /storage-pool/volume:
       access: protected
