@@ -42,9 +42,6 @@ class Manager(object):
 
         # This is how we notify users via websockets
         self.notifier = notifier
-        self.notifier.set_model(self.overlay)
-        self.notifier.start()
-
         # Map of hosts by their uuids so that we can maintain some
         # state information about our communication with them.
         self.hosts = {}
@@ -118,6 +115,10 @@ class Manager(object):
             print 'data successfully loaded'
             self.overlay.load(data)
             self.overlay.commit()
+
+            # Start send out the database changes to the clients.
+            self.notifier.set_model(self.overlay)
+            self.notifier.start()
 
             # Start processing database changes.
             self.listener.start()
