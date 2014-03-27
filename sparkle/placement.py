@@ -151,6 +151,80 @@ class Placement(object):
             yield row.m.image[row.d.image]
 
 
+    def repair_extent(self, row):
+        volume = row.m.volume[row.d.volume]
+        return self.repair_volume(volume)
+
+
+    def repair_volume(self, row):
+        if row.d.state == 'deleted':
+            candidates = set()
+
+            for host_sp in row.m.host_storage_pool.list(storage_pool=row.d.storage_pool):
+                if host_sp.c.status != 'ready':
+                    continue
+
+                host = row.m.host.get(host_sp.c.host)
+                if not host or host.d.state == 'evacuated':
+                    continue
+
+                candidates.add(host.pkey)
+
+            cp = self.manager.rows.get((row.table.name, row.pkey), set())
+            best = cp.intersection(candidates)
+
+            if best:
+                yield next(iter(best))
+            elif candidates:
+                yield next(iter(candidates))
+
+        elif row.d.base_image:
+            sps = set()
+            image = row.m.image[row.d.base_image]
+
+            if image.d.source_uri:
+                # We can place anywhere
+                continue
+
+            for sv in row.m.volume.list(image=image.pkey):
+                if not sv.d.base_image and sv.d.state != 'deleted':
+                    sps.add(sv.d.storage_pool)
+
+            candidates = set()
+
+            # Candidates that can see backing volumes of an image
+            # the volume should be intialized from.
+            for sp in sps:
+                for host_sp in row.m.host_storage_pool.list(storage_pool=sp):
+                    if host_sp.c.status != 'ready':
+                        continue
+
+                    host = row.m.host.get(host_sp.c.host)
+                    if not host or host.d.state == 'evacuated':
+                        continue
+
+                    candidates.add(host.pkey)
+
+            # Candidates that are based on a storagepool the volume belongs to.
+            for host_sp in row.m.host_storage_pool.list(storage_pool=row.d.storage_pool):
+                 if host_sp.c.status != 'ready':
+                    continue
+
+                host = row.m.host.get(host_sp.c.host)
+                if not host or host.d.state == 'evacuated':
+                    continue
+
+                candidates.add(host.pkey)
+
+            cp = self.manager.rows.get((row.table.name, row.pkey), set())
+            best = cp.intersection(candidates)
+
+            if best:
+                yield next(iter(best))
+            elif candidates:
+                yield next(iter(candidates))
+
+
     def damage_image(self, row):
         for volume in row.m.volume.list(base_image=row.pkey):
             yield volume
