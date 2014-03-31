@@ -1,6 +1,8 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
+from random import randint
+
 
 class Placement(object):
     """Encapsulates placement algorithms."""
@@ -60,6 +62,40 @@ class Placement(object):
             print 'Placement.%s not found' % (handler,)
 
 
+    def select_host_for(self, row, candidates=None):
+        """
+        Yield a host uuid for selected row.
+
+        Candidates can be a set used to restrict the selection to a
+        particular group of hosts.  The host may not be evacuated and
+        must be present (have current state).
+
+        If a host the row is currently placed on satisfies the constraints,
+        it is yielded to prevent random resource relocations.
+
+        No hosts are yielded if none satisfy the constraints.
+        """
+
+        # Find hosts that are running and should continue doing so.
+        viable = set(row.m.host.list_keys(state='present', status='present'))
+
+        if candidates:
+            # Apply further restriction from the caller.
+            viable.difference_update(candidates)
+
+        # Find out about previous placement.
+        old_hosts = self.manager.rows.get((row.table.name, row.pkey), set())
+
+        # In the ideal case, we would find our target host among the hosts
+        # the row is currently placed on.
+        best = old_hosts.intersection(viable)
+
+        if best:
+            yield next(iter(best))
+        elif viable:
+            yield list(viable)[randint(1, len(viable)) - 1]
+
+
     def damage_host(self, row):
         for host_disk in row.m.host_disk.list(host=row.pkey):
             yield host_disk
@@ -107,7 +143,7 @@ class Placement(object):
         # Place disk for every host_disk.
         for host_disk in row.m.host_disk.list(disk=row.pkey):
             for host in row.m.host.list(uuid=host_disk.c.host):
-                if host.d.state != 'evacuated':
+                if host.d.state == 'present':
                     yield host.pkey
 
         # Also place the disk to hosts that can see at least part of
@@ -115,7 +151,7 @@ class Placement(object):
         for disk in row.m.disk.list(storage_pool=row.d.storage_pool):
             for host_disk in row.m.host_disk.list(disk=row.pkey):
                 for host in row.m.host.list(uuid=host_disk.c.host):
-                    if host.d.state != 'evacuated':
+                    if host.d.state == 'present':
                         yield host.pkey
 
 
@@ -129,7 +165,7 @@ class Placement(object):
         for disk in row.m.disk.list(storage_pool=row.pkey):
             for host_disk in row.m.host_disk.list(disk=disk.pkey):
                 for host in row.m.host.list(uuid=host_disk.c.host):
-                    if host.d.state != 'evacuated':
+                    if host.d.state == 'present':
                         yield host.pkey
 
 
@@ -142,11 +178,13 @@ class Placement(object):
 
 
     def repair_extent(self, row):
-        volume = row.m.volume[row.d.volume]
-        return self.repair_volume(volume)
+        if row.d.volume:
+            # Some extents represent a free space and thus have no volume.
+            for host in self.repair_volume(row.m.volume[row.d.volume]):
+                yield host
 
 
-    def repair_volume(self, row):
+    def repair_volume(self, row, for_images=set()):
         if row.d.state == 'deleted':
             candidates = set()
 
@@ -155,7 +193,8 @@ class Placement(object):
                     continue
 
                 host = row.m.host.get(host_sp.c.host)
-                if not host or host.d.state == 'evacuated':
+                if not host or host.d.state != 'present' or \
+                               host.c.status != 'present':
                     continue
 
                 candidates.add(host.pkey)
@@ -164,60 +203,88 @@ class Placement(object):
             best = cp.intersection(candidates)
 
             if best:
-                yield next(iter(best))
-            elif candidates:
-                yield next(iter(candidates))
+                return self.select_host_for(row, best)
+
+            if candidates:
+                return self.select_host_for(row, candidates)
 
         elif row.d.base_image:
-            sps = set()
             image = row.m.image[row.d.base_image]
 
-            if image.d.source_uri:
-                # We can place anywhere
-                continue
-
+            sps = set()
             for sv in row.m.volume.list(image=image.pkey):
                 if not sv.d.base_image and sv.d.state != 'deleted':
                     sps.add(sv.d.storage_pool)
 
-            candidates = set()
+            # Candidates that can see some of the backing volumes of the
+            # image the target volume is to be intialized from.
+            source_hosts = set()
 
-            # Candidates that can see backing volumes of an image
-            # the volume should be intialized from.
             for sp in sps:
                 for host_sp in row.m.host_storage_pool.list(storage_pool=sp):
                     if host_sp.c.status != 'ready':
                         continue
 
                     host = row.m.host.get(host_sp.c.host)
-                    if not host or host.d.state == 'evacuated':
+                    if not host or host.d.state != 'present' or \
+                                   host.c.status != 'present':
                         continue
 
-                    candidates.add(host.pkey)
+                    source_hosts.add(host.pkey)
 
-            # Candidates that are based on a storagepool the volume belongs to.
+            # Candidates that can actually hold the target volume.
+            dest_hosts = set()
+
             for host_sp in row.m.host_storage_pool.list(storage_pool=row.d.storage_pool):
                 if host_sp.c.status != 'ready':
                     continue
 
                 host = row.m.host.get(host_sp.c.host)
-                if not host or host.d.state == 'evacuated':
+                if not host or host.d.state != 'present' or \
+                               host.c.status != 'present':
                     continue
 
-                candidates.add(host.pkey)
+                dest_hosts.add(host.pkey)
 
             cp = self.manager.rows.get((row.table.name, row.pkey), set())
+            candidates = source_hosts.intersection(dest_hosts)
             best = cp.intersection(candidates)
 
             if best:
-                yield next(iter(best))
-            elif candidates:
-                yield next(iter(candidates))
+                # Prefer not to change placement.
+                return self.select_host_for(row, best)
+
+            if candidates:
+                # If we need to pick a new host, pick one with the source
+                # storage pool so that we can make a disk-to-disk copy.
+                return self.select_host_for(row, candidates)
+
+            if image.d.source_uri:
+                # If all fails but the image has an URI, place anywhere so
+                # that the volume can be initialized via HTTP or something...
+                return self.select_host_for(row)
+
+        elif row.d.image:
+            # Place volume after the image it is backing.
+            return self.repair_image(row.m.image[row.d.image], for_images)
+
+        # All repair methods must produce iterators.
+        return iter(())
 
 
     def damage_image(self, row):
         for volume in row.m.volume.list(base_image=row.pkey):
             yield volume
+
+
+    def repair_image(self, row, for_images=set()):
+        if row.pkey in for_images:
+            return
+
+        for volume in row.m.volume.list(base_image=row.pkey):
+            for_images = for_images.union((row.pkey,))
+            for host in self.repair_volume(volume, for_images):
+                yield host
 
 
     def damage_host_storage_pool(self, row):

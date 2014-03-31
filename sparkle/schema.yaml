@@ -131,6 +131,7 @@ extent:
 host:
   pkey: uuid
   user-pkey: true
+  index: [status, state]
   mount:
     /host:
       access: protected
