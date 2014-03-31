@@ -11,8 +11,8 @@ storage_pool_placement:
         - [storage_pool, pool, desired, {uuid: pool}]
         - [disk, disk1, desired, {id: disk1, storage_pool: pool, size: 1024}]
         - [disk, disk2, desired, {id: disk2, storage_pool: pool, size: 1024}]
-        - [host, host1, desired, {uuid: host1}]
-        - [host, host2, desired, {uuid: host2}]
+        - [host, host1, desired, {uuid: host1, state: present}]
+        - [host, host2, desired, {uuid: host2, state: present}]
 
       expect:
         host1: &empty_host1

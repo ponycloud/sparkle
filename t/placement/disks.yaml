@@ -7,7 +7,7 @@ simple_disk_placement:
 
   steps:
     - update:
-        - [host, host1, desired, {uuid: host1}]
+        - [host, host1, desired, {uuid: host1, state: present}]
         - [disk, disk1, desired, {id: disk1, size: 1024, storage_pool: null}]
         - [disk, disk2, desired, {id: disk2, size: 1024, storage_pool: null}]
 
