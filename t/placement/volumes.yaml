@@ -1,0 +1,56 @@
+%YAML 1.2
+---
+volume_placement:
+  about: |
+    We provide a host, storage_pools and host_storage_pools and required
+    that specified volumes are placed along with relevant images and extents.
+
+  steps:
+    - update:
+        - [host, host1, desired, {uuid: host1, state: present}]
+        - [disk, disk1, desired, {id: disk1, storage_pool: pool, size: 1024}]
+        - [host_disk, [host1, disk1], current, {host: host1, disk: disk1}]
+        - [storage_pool, pool, desired, {uuid: pool}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk1]
+          - [storage_pool, pool]
+
+    - update:
+        - [image, image1, desired, {uuid: image1, source_uri: uri}]
+        - [volume, volume1, desired, {uuid: volume1, image: image1, base_image: image1}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk1]
+          - [storage_pool, pool]
+          - [image, image1]
+          - [volume, volume1]
+
+    - update:
+        - [volume, volume1, desired, {uuid: volume1, image: image1}]
+        - [volume, volume2, desired, {uuid: volume2, base_image: image1}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk1]
+          - [storage_pool, pool]
+          - [image, image1]
+          - [volume, volume1]
+          - [volume, volume2]
+
+    - update:
+        - [volume, volume2, desired, {uuid: volume2}]
+
+      expect:
+        host1:
+          - [host, host1]
+          - [disk, disk1]
+          - [storage_pool, pool]
+
+
+# vim:set sw=2 ts=2 et:
