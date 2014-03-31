@@ -56,7 +56,7 @@ class Placement(object):
         handler = 'repair_' + row.table.name
 
         if hasattr(self, handler):
-            for sub in getattr(self, handler)(row):
+            for sub in set(getattr(self, handler)(row)):
                 yield sub
         else:
             print 'Placement.%s not found' % (handler,)
