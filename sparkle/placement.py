@@ -176,6 +176,9 @@ class Placement(object):
         if row.d.image:
             yield row.m.image[row.d.image]
 
+        if row.d.base_image:
+            yield row.m.image[row.d.base_image]
+
 
     def repair_extent(self, row):
         if row.d.volume:
@@ -274,6 +277,9 @@ class Placement(object):
 
     def damage_image(self, row):
         for volume in row.m.volume.list(base_image=row.pkey):
+            yield volume
+
+        for volume in row.m.volume.list(image=row.pkey):
             yield volume
 
 
