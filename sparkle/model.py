@@ -433,6 +433,18 @@ class Row(object):
 
         return self.desired.get(key, default)
 
+    def get(self, key, default=None):
+        """
+        Get value for given key in either desired or current state.
+        """
+
+        desired = self.get_desired(key)
+
+        if desired is None:
+            return self.get_current(key)
+
+        return desired
+
     def to_dict(self):
         result = {}
 
