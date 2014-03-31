@@ -292,16 +292,23 @@ class Table(Mapping):
 
         result = None
 
+        if not fields:
+            return set(self)
+
         for f, fv in fields.iteritems():
-            subresult = self.desired.lookup(f, fv)
-            subresult = subresult.union(self.current.lookup(f, fv))
+            subresult = set(self.desired.lookup(f, fv))
+            subresult.update(self.current.lookup(f, fv))
 
             if result is None:
                 result = subresult
             else:
-                result = result.intersection(subresult)
+                result.intersection_update(subresult)
 
-        return result or set(self)
+            if not result:
+                return result
+
+        return result
+
 
     def one(self, **keys):
         """
@@ -615,16 +622,19 @@ class IndexedMapping(MutableMapping):
     def kwlookup(self, **fields):
         result = None
 
+        if not fields:
+            return set(self)
+
         for f, fv in fields.iteritems():
             if result is None:
-                result = self.lookup(f, fv)
+                result = set(self.lookup(f, fv))
             else:
-                result = result.intersection(self.lookup(f, fv))
+                result.intersection_update(self.lookup(f, fv))
 
             if not result:
                 return result
 
-        return result or set(self)
+        return result
 
     def filter(self, **fields):
         return {k: self.data[k] for k in self.kwlookup(**fields)}

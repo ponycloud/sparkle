@@ -81,7 +81,7 @@ class Placement(object):
 
         if candidates:
             # Apply further restriction from the caller.
-            viable.difference_update(candidates)
+            viable.intersection_update(candidates)
 
         # Find out about previous placement.
         old_hosts = self.manager.rows.get((row.table.name, row.pkey), set())
@@ -130,7 +130,7 @@ class Placement(object):
 
 
     def damage_host_disk(self, row):
-        for disk in row.m.disk.list(id=row.c.disk):
+        for disk in row.m.disk.list(id=row.pkey[1]):
             yield disk
 
 
@@ -296,8 +296,8 @@ class Placement(object):
 
 
     def damage_host_storage_pool(self, row):
-        if row.c.host in self.manager.hosts:
-            host = self.manager.hosts[row.c.host]
+        if row.pkey[0] in self.manager.hosts:
+            host = self.manager.hosts[row.pkey[0]]
             h_volumes = host.desired.get('volume', set())
             for volume in h_volumes:
                 yield row.m.volume[volume]
@@ -306,8 +306,8 @@ class Placement(object):
         # but we expect to have a whole lot of volumes and it would
         # not be very wise to iterate over them every time a host
         # tells us about a minor change of a storage pool.
-        allv = row.m.volume.list_keys(storage_pool=row.c.storage_pool)
-        spdv = row.m.volume.list_keys(storage_pool=row.c.storage_pool,
+        allv = row.m.volume.list_keys(storage_pool=row.pkey[1])
+        spdv = row.m.volume.list_keys(storage_pool=row.pkey[1],
                                       state='deleted')
         nonbiv = row.m.volume.list_keys(storage_pool=row.c.storage_pool,
                                         base_image=None)
