@@ -197,7 +197,7 @@ class Placement(object):
 
             # Candidates that are based on a storagepool the volume belongs to.
             for host_sp in row.m.host_storage_pool.list(storage_pool=row.d.storage_pool):
-                 if host_sp.c.status != 'ready':
+                if host_sp.c.status != 'ready':
                     continue
 
                 host = row.m.host.get(host_sp.c.host)
