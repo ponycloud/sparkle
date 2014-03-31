@@ -281,8 +281,9 @@ class Placement(object):
         if row.pkey in for_images:
             return
 
+        for_images = for_images.union((row.pkey,))
+
         for volume in row.m.volume.list(base_image=row.pkey):
-            for_images = for_images.union((row.pkey,))
             for host in self.repair_volume(volume, for_images):
                 yield host
 
