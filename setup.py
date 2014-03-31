@@ -10,7 +10,7 @@ setup(
     description = ('distributed cloud infrastructure management'),
     license = 'MIT',
     keywords = 'cloud management',
-    url = 'http://github.com/ponycloud/python-ponycloud',
+    url = 'http://github.com/ponycloud/sparkle/',
     packages=['sparkle'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
