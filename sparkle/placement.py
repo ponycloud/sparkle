@@ -262,7 +262,7 @@ class Placement(object):
             if image.d.source_uri:
                 # If all fails but the image has an URI, place anywhere so
                 # that the volume can be initialized via HTTP or something...
-                return self.select_host_for(row)
+                return self.select_host_for(row, dest_hosts)
 
         elif row.d.image:
             # Place volume after the image it is backing.
