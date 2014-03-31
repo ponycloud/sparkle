@@ -148,11 +148,12 @@ class Placement(object):
 
         # Also place the disk to hosts that can see at least part of
         # disk's storage pool via *some* host_disk.
-        for disk in row.m.disk.list(storage_pool=row.d.storage_pool):
-            for host_disk in row.m.host_disk.list(disk=row.pkey):
-                for host in row.m.host.list(uuid=host_disk.c.host):
-                    if host.d.state == 'present':
-                        yield host.pkey
+        if row.d.storage_pool:
+            for disk in row.m.disk.list(storage_pool=row.d.storage_pool):
+                for host_disk in row.m.host_disk.list(disk=disk.pkey):
+                    for host in row.m.host.list(uuid=host_disk.c.host):
+                        if host.d.state == 'present':
+                            yield host.pkey
 
 
     def damage_storage_pool(self, row):
