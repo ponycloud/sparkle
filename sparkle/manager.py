@@ -156,6 +156,9 @@ class Manager(object):
             for row in self.placement.damage(old):
                 damaged.add((row.table.name, row.pkey))
 
+            for row in self.placement.damage(new):
+                damaged.add((row.table.name, row.pkey))
+
         # Let the commit proceed.
         yield
 

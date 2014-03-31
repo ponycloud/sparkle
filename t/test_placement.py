@@ -56,6 +56,9 @@ class MockManager(object):
             for row in self.placement.damage(old):
                 damaged.add((row.table.name, row.pkey))
 
+            for row in self.placement.damage(new):
+                damaged.add((row.table.name, row.pkey))
+
         yield
 
         for name, pkey in damaged:
