@@ -61,12 +61,6 @@ class Placement(object):
 
 
     def damage_host(self, row):
-        for nic in row.m.nic.list(host=row.pkey):
-            yield nic
-
-        for bond in row.m.bond.list(host=row.pkey):
-            yield bond
-
         for host_disk in row.m.host_disk.list(host=row.pkey):
             yield host_disk
 
@@ -88,19 +82,15 @@ class Placement(object):
 
 
     def repair_bond(self, row):
-        if row.m.host[row.d.host].d.state != 'evacuated':
-            yield row.d.host
+        yield row.d.host
 
 
     def repair_nic(self, row):
-        if row.m.host[row.d.host].d.state != 'evacuated':
-            yield row.d.host
+        yield row.d.host
 
 
     def repair_nic_role(self, row):
-        bond = row.m.bond[row.d.bond]
-        if bond.m.host[bond.d.host].d.state != 'evacuated':
-            yield bond.d.host
+        yield row.m.bond[row.d.bond].d.host
 
 
     def damage_host_disk(self, row):
