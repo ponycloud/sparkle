@@ -10,6 +10,7 @@ from simplejson import dumps
 from traceback import print_exc
 from auth import authenticate
 
+
 def json_response(data, status=200, headers={}):
     """
     Creates JSON response object from given structure.
@@ -49,8 +50,8 @@ class Flaskful(Flask):
         def unauthorized(e):
             return json_response({
                 'error': 'unauthorized',
-                'message': e.description \
-                            if not e.description.startswith('<p>') \
+                'message': e.description
+                            if not e.description.startswith('<p>')
                             else 'you need to login to access this url'
             }, 401, getattr(e, 'headers', {}))
 
@@ -58,8 +59,8 @@ class Flaskful(Flask):
         def page_not_found(e):
             return json_response({
                 'error': 'not-found',
-                'message': e.description \
-                                if not e.description.startswith('<p>') \
+                'message': e.description
+                                if not e.description.startswith('<p>')
                                 else 'requested url was not found',
             }, 404, getattr(e, 'headers', {}))
 
@@ -67,8 +68,8 @@ class Flaskful(Flask):
         def method_not_allowed(e):
             return json_response({
                 'error': 'method-not-allowed',
-                'message': e.description \
-                            if not e.description.startswith('<p>') \
+                'message': e.description
+                            if not e.description.startswith('<p>')
                             else 'method not allowed',
             }, 405, getattr(e, 'headers', {}))
 

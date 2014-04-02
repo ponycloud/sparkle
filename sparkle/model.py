@@ -309,7 +309,6 @@ class Table(Mapping):
 
         return result
 
-
     def one(self, **keys):
         """
         Same as list(), but return just one item.
@@ -523,12 +522,12 @@ class OverlayMapping(MutableMapping):
         return repr(dict(self))
 
     def lookup(self, name, value):
-        parent  = self.parent.lookup(name, value)
+        parent = self.parent.lookup(name, value)
         overlay = self.overlay.lookup(name, value)
         return parent.difference(self.deleted).union(overlay)
 
     def kwlookup(self, **fields):
-        parent  = self.parent.kwlookup(**fields)
+        parent = self.parent.kwlookup(**fields)
         overlay = self.overlay.kwlookup(**fields)
         return parent.difference(self.deleted).union(overlay)
 

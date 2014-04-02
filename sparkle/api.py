@@ -40,7 +40,7 @@ def path_to_rule(path):
     fullpath = ['']
 
     endpoint = schema.root
-    covered  = set()
+    covered = set()
     for elem in path:
         endpoint = endpoint.children[elem]
         fullpath.append(elem)
@@ -291,7 +291,7 @@ def make_sparkle_app(manager):
 
         # Rename handlers to satisfy Flask.
         collection_handler.__name__ = 'c_' + '_'.join(path)
-        entity_handler.__name__     = 'e_' + '_'.join(path)
+        entity_handler.__name__ = 'e_' + '_'.join(path)
 
         return collection_handler, entity_handler
 

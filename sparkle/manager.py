@@ -57,7 +57,6 @@ class Manager(object):
         # individual hosts.
         self.overlay.add_callback(self.on_commit)
 
-
     def start(self):
         """
         Launches startup-triggered asynchronous operations.
@@ -67,7 +66,6 @@ class Manager(object):
 
         # We need to load data from database on startup.
         self.schedule_load()
-
 
     def schedule_load(self):
         """
@@ -126,18 +124,15 @@ class Manager(object):
         # Configure where to go from there.
         d.addCallbacks(success, failure)
 
-
     def apply_changes(self, changes):
         """Incorporate changes from database into the model."""
         self.overlay.load(changes)
         self.overlay.commit()
 
-
     def receive(self, message, sender):
         if message['uuid'] not in self.hosts:
             self.hosts[message['uuid']] = Twilight(self, message['uuid'])
         self.hosts[message['uuid']].receive(message, sender)
-
 
     def on_commit(self, rows):
         """
@@ -183,7 +178,6 @@ class Manager(object):
         for host in hosts:
             self.hosts[host].send_pending_changes()
 
-
     def update_placement(self, hosts, name, pkey):
         """
         Update placement of specified row.
@@ -200,7 +194,6 @@ class Manager(object):
         for host in old_hosts.symmetric_difference(hosts):
             self.hosts[host].on_row_changed(name, pkey)
 
-
     def bestow(self, host, name, pkey):
         if host not in self.hosts:
             self.hosts[host] = Twilight(self, host)
@@ -210,7 +203,6 @@ class Manager(object):
 
         hosts = self.rows.setdefault((name, pkey), set())
         hosts.add(host.uuid)
-
 
     def withdraw(self, host, name, pkey):
         if host not in self.hosts:
@@ -229,7 +221,6 @@ class Manager(object):
 
         if not host.desired[name]:
             del host.desired[name]
-
 
     def list_collection(self, path, keys):
         """
@@ -261,7 +252,6 @@ class Manager(object):
             for key in schema.tables[endpoint.table.name].pkey:
                 if key not in keys:
                     return {row.get(key): row.to_dict() for row in rows}
-
 
     def get_entity(self, path, keys):
         """Called from API to obtain entity description."""

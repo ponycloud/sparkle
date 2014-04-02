@@ -47,11 +47,9 @@ class Twilight(object):
         self.keep_alive = task.LoopingCall(self.send_changes, [])
         self.keep_alive.start(15.0)
 
-
     def on_row_changed(self, name, pkey):
         """Called to notify us about a changed row."""
         self.pending.add((name, pkey))
-
 
     def send_pending_changes(self):
         """
@@ -72,11 +70,9 @@ class Twilight(object):
         if changes:
             self.send_changes(changes)
 
-
     def send(self, message):
         """Send a message to our peer."""
         self.manager.router.send(message, self.peer)
-
 
     def send_changes(self, changes=[]):
         """
@@ -91,7 +87,6 @@ class Twilight(object):
         })
 
         self.local_sequence += 1
-
 
     def receive(self, message, peer):
         """
@@ -113,7 +108,6 @@ class Twilight(object):
 
         print '[host %r] unknown event type %r' % (self.uuid, event)
 
-
     def resync(self):
         """
         Perform full desired state resync.
@@ -132,7 +126,6 @@ class Twilight(object):
                     changes.append((name, pkey, 'desired', part))
 
         self.send_changes(changes)
-
 
     def update(self, message):
         """
@@ -164,7 +157,6 @@ class Twilight(object):
         changes = list(self.iter_valid_changes(message['changes']))
         self.merge_current(changes)
         self.remote_sequence += 1
-
 
     def valid_row(self, name, pkey, state, part):
         """
@@ -215,7 +207,6 @@ class Twilight(object):
         # Entity seems acceptable.
         return True
 
-
     def iter_valid_changes(self, changes):
         """
         Filter rows approved by ``self.valid_row()`` while converting
@@ -230,7 +221,6 @@ class Twilight(object):
             else:
                 print '[host %r] invalid update: %r' \
                             % (self.uuid, change)
-
 
     def merge_current(self, changes):
         """
@@ -248,7 +238,6 @@ class Twilight(object):
         self.manager.overlay.load(changes)
         self.manager.overlay.commit()
 
-
     def replace_current(self, changes):
         """
         Merge specified changes to the model and remove our rows not found
@@ -262,7 +251,7 @@ class Twilight(object):
         # them not being mentioned in the replacement changeset.
         update_rows = set([tuple(change[:2]) for change in changes])
         delete_rows = self.current.difference(update_rows)
-        delete_changes = [(name, pkey, 'current', None) \
+        delete_changes = [(name, pkey, 'current', None)
                           for name, pkey in delete_rows]
 
         # Record the ownership information.

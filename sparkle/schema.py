@@ -9,7 +9,7 @@ __all__ = ['Schema', 'schema']
 
 class Root(object):
     def __init__(self):
-        self.table  = None
+        self.table = None
         self.access = 'private'
         self.filter = {}
         self.parent = None
@@ -17,14 +17,14 @@ class Root(object):
 
     @property
     def public(self):
-        return {name: child.public \
-                for name, child in self.children.iteritems() \
+        return {name: child.public
+                for name, child in self.children.iteritems()
                 if child.access not in ('private',)}
 
 
 class Endpoint(object):
     def __init__(self, table, path, mount):
-        self.table  = table
+        self.table = table
         self.access = mount['access']
         self.filter = mount.get('filter', {})
         self.parent = None
@@ -38,8 +38,8 @@ class Endpoint(object):
             'fkeys': list(self.table.fkeys),
             'table': self.table.name,
             'access': self.access,
-            'children': {name: child.public \
-                         for name, child in self.children.iteritems() \
+            'children': {name: child.public
+                         for name, child in self.children.iteritems()
                          if child.access not in ('private',)}
         }
 
@@ -84,8 +84,8 @@ class Endpoint(object):
 
 class Table(object):
     def __init__(self, tname, table):
-        self.name  = tname
-        self.pkey  = table['pkey']
+        self.name = tname
+        self.pkey = table['pkey']
         self.index = set(table.get('index', []))
         self.fkeys = set()
         self.virtual = table.get('virtual', False)

@@ -56,9 +56,9 @@ def validate_dbdict(creds, data, write):
     """
 
     alicorn = creds.get('alicorn', False)
-    tenant  = creds.get('tenant')
-    role    = creds.get('role')
-    user    = creds.get('user')
+    tenant = creds.get('tenant')
+    role = creds.get('role')
+    user = creds.get('user')
 
     def check_desired(data, ep, path):
         if not isinstance(data, Mapping):

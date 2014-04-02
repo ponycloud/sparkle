@@ -24,6 +24,7 @@ from sparkle.util import remove_nulls
 from collections import Iterable, Mapping, MutableMapping
 from sqlalchemy.exc import DatabaseError
 
+
 def unescape(part):
     part = part.replace('~1', '/')
     part = part.replace('~0', '~')
@@ -63,7 +64,6 @@ class Pointer(object):
         self.parent = parent
         self.path = path
 
-
     @property
     def key(self):
         """
@@ -75,7 +75,6 @@ class Pointer(object):
             raise DataError('cannot operate on the absolute root', self.path)
 
         return self.path[-1]
-
 
     def relative(self, path):
         """
@@ -96,11 +95,9 @@ class Pointer(object):
 
         return Pointer(parent, self.path + path)
 
-
     def exists(self):
         """Return True if the pointer target exists."""
         return self.key in self.parent
-
 
     def get(self):
         """
@@ -111,7 +108,6 @@ class Pointer(object):
             return self.parent[self.key]
         except KeyError:
             raise PathError('not found', self.path)
-
 
     def remove(self):
         """
@@ -126,7 +122,6 @@ class Pointer(object):
             raise DataError(e.message, self.path)
         except DatabaseError, e:
             raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
-
 
     def add(self, value):
         """
@@ -147,7 +142,6 @@ class Pointer(object):
         except DatabaseError, e:
             raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
 
-
     def replace(self, value):
         """
         Replace the value at the pointed-to location.
@@ -165,7 +159,6 @@ class Pointer(object):
         else:
             self.remove()
             self.add(value)
-
 
     def cut(self):
         """
@@ -185,7 +178,6 @@ class Pointer(object):
         else:
             self.remove()
 
-
     def paste(self, value):
         """
         Paste value previously extracted using the cut function.
@@ -202,7 +194,6 @@ class Pointer(object):
                 raise DataError('DB: ' + e.orig.diag.message_primary, self.path)
         else:
             self.add(value)
-
 
     def merge(self, value):
         """
@@ -223,7 +214,6 @@ class Pointer(object):
         for k, v in value.iteritems():
             self.relative([k]).merge(v)
 
-
     def verify(self, muster):
         """
         Recursively verify that mapping contains values defined in the muster.
@@ -237,7 +227,6 @@ class Pointer(object):
                 return False
 
         return True
-
 
     def patch(self, ops):
         """

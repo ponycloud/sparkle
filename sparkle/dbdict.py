@@ -85,7 +85,7 @@ def preprocess_patch(children, patch):
 
     for op in patch:
         value = op.get('value', {})
-        path  = op.get('path', [])
+        path = op.get('path', [])
         write = ('test' != op['op'])
 
         try:

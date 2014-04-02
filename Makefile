@@ -21,6 +21,11 @@ pngs  := ${pngs} ${dbpngs}
 
 all: doc
 
+indent:
+	autopep8 --max-line-length=120 \
+	         --ignore=E24,W6,E301,E126,E127 \
+		 -ir sparkle t
+
 doc: ${htmls}
 
 clean:

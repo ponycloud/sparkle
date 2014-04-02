@@ -170,7 +170,7 @@ class DatabaseListener(object):
             item = loads(self.conn.notifies.pop(0).payload)
 
             # Parse first two arguments - type of operation and transaction.
-            op   = item[0]
+            op = item[0]
             txid = int(item[1])
 
             if self.txid is None:

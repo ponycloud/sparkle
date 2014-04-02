@@ -6,6 +6,7 @@ from __future__ import unicode_literals
 __all__ = ['UserError', 'DataError', 'AccessError', 'PathError',
            'ConflictError', 'PatchError']
 
+
 class UserError(Exception):
     """
     Common parent for API exceptions.

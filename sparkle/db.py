@@ -8,6 +8,7 @@ from sqlalchemy.types import UserDefinedType
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from simplejson import loads, dumps
 
+
 def make_transparent_type(name):
     class TransparentType(UserDefinedType):
         def get_col_spec(self):
@@ -31,8 +32,9 @@ ischema_names['int8range'] = make_transparent_type('INT8RANGE')
 register_type(new_type((869,), 'INET', UNICODE))
 register_type(new_array_type((1041,), 'INETARRAY', UNICODE))
 
-# A json->dict converter to process values coming from psycopg2.
+
 def cast_json(value, cur):
+    """A json->dict converter to process values coming from psycopg2."""
     if value is None:
         return None
     return loads(value)
@@ -45,8 +47,9 @@ JSONARRAY = new_array_type((199,), 'JSONARRAY', JSON)
 register_type(JSON)
 register_type(JSONARRAY)
 
-# Converts dict passed to psycopg2 to JSON string.
+
 def adapt_dict(value):
+    """Converts dict passed to psycopg2 to JSON string."""
     return QuotedString(dumps(value))
 
 # Register dict->json adapter.

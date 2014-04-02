@@ -11,7 +11,6 @@ class Placement(object):
         """Remember the manager."""
         self.manager = manager
 
-
     def damage(self, row):
         """
         Map rows affected by update.
@@ -40,7 +39,6 @@ class Placement(object):
 
             yield row
 
-
     def repair(self, row):
         """
         Reconstruct placement of specified row.
@@ -60,7 +58,6 @@ class Placement(object):
                 yield sub
         else:
             print 'Placement.%s not found' % (handler,)
-
 
     def select_host_for(self, row, candidates=None):
         """
@@ -95,7 +92,6 @@ class Placement(object):
         elif viable:
             yield list(viable)[randint(1, len(viable)) - 1]
 
-
     def damage_host(self, row):
         for host_disk in row.m.host_disk.list(host=row.pkey):
             yield host_disk
@@ -107,37 +103,29 @@ class Placement(object):
             for volume in volumes:
                 yield row.m.volume[volume]
 
-
     def repair_host(self, row):
         yield row.pkey
-
 
     def damage_bond(self, row):
         for nic_role in row.m.nic_role.list(bond=row.pkey):
             yield nic_role
 
-
     def repair_bond(self, row):
         yield row.d.host
-
 
     def repair_nic(self, row):
         yield row.d.host
 
-
     def repair_nic_role(self, row):
         yield row.m.bond[row.d.bond].d.host
-
 
     def damage_host_disk(self, row):
         for disk in row.m.disk.list(id=row.pkey[1]):
             yield disk
 
-
     def damage_disk(self, row):
         if row.d.storage_pool:
             yield row.m.storage_pool[row.d.storage_pool]
-
 
     def repair_disk(self, row):
         # Place disk for every host_disk.
@@ -155,11 +143,9 @@ class Placement(object):
                         if host.d.state == 'present':
                             yield host.pkey
 
-
     def damage_storage_pool(self, row):
         for disk in row.m.disk.list(storage_pool=row.pkey):
             yield disk
-
 
     def repair_storage_pool(self, row):
         # Place storage pool on all hosts that can see at least a part of it.
@@ -168,7 +154,6 @@ class Placement(object):
                 for host in row.m.host.list(uuid=host_disk.c.host):
                     if host.d.state == 'present':
                         yield host.pkey
-
 
     def damage_volume(self, row):
         for extent in row.m.extent.list(volume=row.pkey):
@@ -180,13 +165,11 @@ class Placement(object):
         if row.d.base_image:
             yield row.m.image[row.d.base_image]
 
-
     def repair_extent(self, row):
         if row.d.volume:
             # Some extents represent a free space and thus have no volume.
             for host in self.repair_volume(row.m.volume[row.d.volume]):
                 yield host
-
 
     def repair_volume(self, row, for_images=set()):
         if row.d.state == 'deleted':
@@ -275,14 +258,12 @@ class Placement(object):
         # All repair methods must produce iterators.
         return iter(())
 
-
     def damage_image(self, row):
         for volume in row.m.volume.list(base_image=row.pkey):
             yield volume
 
         for volume in row.m.volume.list(image=row.pkey):
             yield volume
-
 
     def repair_image(self, row, for_images=set()):
         if row.pkey in for_images:
@@ -293,7 +274,6 @@ class Placement(object):
         for volume in row.m.volume.list(base_image=row.pkey):
             for host in self.repair_volume(volume, for_images):
                 yield host
-
 
     def damage_host_storage_pool(self, row):
         if row.pkey[0] in self.manager.hosts:
