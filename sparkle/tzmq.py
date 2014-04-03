@@ -99,8 +99,11 @@ class Router(object):
             # Otherwise just use the default and save user some work.
             recipient = self.default_recipient
 
+        # JSON-encode the message.
+        json = dumps(message, for_json=True)
+
         # Send the message.
-        self.socket.send_multipart([recipient, dumps(message), str(int(time()))])
+        self.socket.send_multipart([recipient, json, str(int(time()))])
 
         # Check for potential replies.
         # This is absolutely essential to do, because Twisted is going to

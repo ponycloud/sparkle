@@ -4,6 +4,7 @@
 __all__ = []
 
 from psycopg2.extensions import *
+from psycopg2.extras import NumericRange
 from sqlalchemy.types import UserDefinedType
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from simplejson import loads, dumps
@@ -54,6 +55,10 @@ def adapt_dict(value):
 
 # Register dict->json adapter.
 register_adapter(dict, adapt_dict)
+
+# Monkey-patch the numeric range to be JSON-serializable.
+# Will explode if the range is not `[)` without infinity.
+NumericRange.for_json = lambda self: [self.lower, self.upper]
 
 
 # vim:set sw=4 ts=4 et:

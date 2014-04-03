@@ -18,7 +18,8 @@ def json_response(data, status=200, headers={}):
     if isinstance(data, Response):
         return data
     else:
-        resp = make_response(dumps(data, indent=2) + '\n', status)
+        json = dumps(data, indent=2, for_json=True)
+        resp = make_response(json + '\n', status)
         resp.headers = headers
 
         if status == 401:

@@ -333,7 +333,7 @@ def make_sparkle_app(manager):
     def make_token_result(credentials):
         """Create response with specified credentials."""
 
-        payload = dumps(credentials)
+        payload = dumps(credentials, for_json=True)
         apikey = manager.apikey
         validity = 3600
 
