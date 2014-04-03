@@ -180,7 +180,7 @@ nic:
     /host/bond/nic:
       access: protected
 
-nic_role:
+net_role:
   pkey: uuid
   mount:
     /host/bond/role:

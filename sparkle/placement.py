@@ -107,8 +107,8 @@ class Placement(object):
         yield row.pkey
 
     def damage_bond(self, row):
-        for nic_role in row.m.nic_role.list(bond=row.pkey):
-            yield nic_role
+        for net_role in row.m.net_role.list(bond=row.pkey):
+            yield net_role
 
     def repair_bond(self, row):
         yield row.d.host
@@ -116,7 +116,7 @@ class Placement(object):
     def repair_nic(self, row):
         yield row.d.host
 
-    def repair_nic_role(self, row):
+    def repair_net_role(self, row):
         yield row.m.bond[row.d.bond].d.host
 
     def damage_host_disk(self, row):
