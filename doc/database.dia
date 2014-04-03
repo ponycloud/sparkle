@@ -2172,7 +2172,7 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:point val="28,15.05"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="28,15.05;37,21.75"/>
+        <dia:rectangle val="28,15.05;36.23,20.15"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -2181,10 +2181,10 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:point val="28,15.05"/>
       </dia:attribute>
       <dia:attribute name="elem_width">
-        <dia:real val="9"/>
+        <dia:real val="8.2300000000000004"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
-        <dia:real val="6.6999999999999993"/>
+        <dia:real val="5.0999999999999996"/>
       </dia:attribute>
       <dia:attribute name="text_colour">
         <dia:color val="#002172"/>
@@ -2277,26 +2277,6 @@ Present is the default state, optional means that it does not necessarily need t
         </dia:composite>
         <dia:composite type="table_attribute">
           <dia:attribute name="name">
-            <dia:string>#type#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="type">
-            <dia:string>#enum#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="comment">
-            <dia:string>#{disk, cdrom}#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="primary_key">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-          <dia:attribute name="nullable">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-          <dia:attribute name="unique">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-        </dia:composite>
-        <dia:composite type="table_attribute">
-          <dia:attribute name="name">
             <dia:string>#description#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
@@ -2337,26 +2317,6 @@ Present is the default state, optional means that it does not necessarily need t
         </dia:composite>
         <dia:composite type="table_attribute">
           <dia:attribute name="name">
-            <dia:string>#source_volume#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="type">
-            <dia:string>#uuid#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="comment">
-            <dia:string>#Volume to take image contents from. NULLed once populated.#</dia:string>
-          </dia:attribute>
-          <dia:attribute name="primary_key">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-          <dia:attribute name="nullable">
-            <dia:boolean val="true"/>
-          </dia:attribute>
-          <dia:attribute name="unique">
-            <dia:boolean val="false"/>
-          </dia:attribute>
-        </dia:composite>
-        <dia:composite type="table_attribute">
-          <dia:attribute name="name">
             <dia:string>#source_uri#</dia:string>
           </dia:attribute>
           <dia:attribute name="type">
@@ -2379,77 +2339,17 @@ Present is the default state, optional means that it does not necessarily need t
     </dia:object>
     <dia:object type="Database - Reference" version="0" id="O18">
       <dia:attribute name="obj_pos">
-        <dia:point val="24.415,20.45"/>
+        <dia:point val="32.115,20.15"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="24.415,19.8;28,20.45"/>
+        <dia:rectangle val="24.415,20.15;32.605,26.2"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="24.415,20.45"/>
-        <dia:point val="24.415,20.45"/>
-        <dia:point val="28,20.45"/>
-        <dia:point val="28,20.45"/>
-      </dia:attribute>
-      <dia:attribute name="orth_orient">
-        <dia:enum val="0"/>
-        <dia:enum val="1"/>
-        <dia:enum val="0"/>
-      </dia:attribute>
-      <dia:attribute name="orth_autoroute">
-        <dia:boolean val="true"/>
-      </dia:attribute>
-      <dia:attribute name="text_colour">
-        <dia:color val="#002172"/>
-      </dia:attribute>
-      <dia:attribute name="line_colour">
-        <dia:color val="#002172"/>
-      </dia:attribute>
-      <dia:attribute name="line_width">
-        <dia:real val="0.10000000000000001"/>
-      </dia:attribute>
-      <dia:attribute name="line_style">
-        <dia:enum val="0"/>
-        <dia:real val="1"/>
-      </dia:attribute>
-      <dia:attribute name="corner_radius">
-        <dia:real val="0"/>
-      </dia:attribute>
-      <dia:attribute name="end_arrow">
-        <dia:enum val="0"/>
-      </dia:attribute>
-      <dia:attribute name="start_point_desc">
-        <dia:string>#1#</dia:string>
-      </dia:attribute>
-      <dia:attribute name="end_point_desc">
-        <dia:string>#n#</dia:string>
-      </dia:attribute>
-      <dia:attribute name="normal_font">
-        <dia:font family="monospace" style="0" name="Courier"/>
-      </dia:attribute>
-      <dia:attribute name="normal_font_height">
-        <dia:real val="0.59999999999999998"/>
-      </dia:attribute>
-      <dia:connections>
-        <dia:connection handle="0" to="O12" connection="6"/>
-        <dia:connection handle="1" to="O17" connection="22"/>
-      </dia:connections>
-    </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O19">
-      <dia:attribute name="obj_pos">
-        <dia:point val="32.5,21.75"/>
-      </dia:attribute>
-      <dia:attribute name="obj_bb">
-        <dia:rectangle val="24.415,21.75;32.99,26.2"/>
-      </dia:attribute>
-      <dia:attribute name="meta">
-        <dia:composite type="dict"/>
-      </dia:attribute>
-      <dia:attribute name="orth_points">
-        <dia:point val="32.5,21.75"/>
-        <dia:point val="32.5,26.2"/>
+        <dia:point val="32.115,20.15"/>
+        <dia:point val="32.115,26.2"/>
         <dia:point val="24.415,26.2"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
@@ -2495,20 +2395,20 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:connection handle="1" to="O12" connection="25"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O20">
+    <dia:object type="Database - Reference" version="0" id="O19">
       <dia:attribute name="obj_pos">
         <dia:point val="24.415,25.4"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="24.415,21.75;30.74,25.4"/>
+        <dia:rectangle val="24.415,20.15;30.5475,25.4"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
         <dia:point val="24.415,25.4"/>
-        <dia:point val="30.25,25.4"/>
-        <dia:point val="30.25,21.75"/>
+        <dia:point val="30.0575,25.4"/>
+        <dia:point val="30.0575,20.15"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
         <dia:enum val="0"/>
@@ -2553,7 +2453,7 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:connection handle="1" to="O17" connection="8"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O21">
+    <dia:object type="Database - Reference" version="0" id="O20">
       <dia:attribute name="obj_pos">
         <dia:point val="24.415,27"/>
       </dia:attribute>
@@ -2613,19 +2513,19 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:connection handle="1" to="O0" connection="6"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O22">
+    <dia:object type="Database - Reference" version="0" id="O21">
       <dia:attribute name="obj_pos">
-        <dia:point val="37,19.65"/>
+        <dia:point val="36.23,18.85"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="37,-12.5;43.7963,19.65"/>
+        <dia:rectangle val="36.23,-12.5;43.7963,18.85"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="37,19.65"/>
-        <dia:point val="43.3062,19.65"/>
+        <dia:point val="36.23,18.85"/>
+        <dia:point val="43.3062,18.85"/>
         <dia:point val="43.3062,-12.5"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
@@ -2667,11 +2567,11 @@ Present is the default state, optional means that it does not necessarily need t
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O17" connection="21"/>
+        <dia:connection handle="0" to="O17" connection="19"/>
         <dia:connection handle="1" to="O0" connection="10"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O23">
+    <dia:object type="Database - Table" version="0" id="O22">
       <dia:attribute name="obj_pos">
         <dia:point val="11,-4"/>
       </dia:attribute>
@@ -2951,7 +2851,7 @@ Default boot device.
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O24">
+    <dia:object type="Database - Reference" version="0" id="O23">
       <dia:attribute name="obj_pos">
         <dia:point val="2.45,39.75"/>
       </dia:attribute>
@@ -3008,10 +2908,10 @@ Default boot device.
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O6" connection="5"/>
-        <dia:connection handle="1" to="O23" connection="28"/>
+        <dia:connection handle="1" to="O22" connection="28"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O25">
+    <dia:object type="Database - Table" version="0" id="O24">
       <dia:attribute name="obj_pos">
         <dia:point val="4.4,9.35"/>
       </dia:attribute>
@@ -3222,7 +3122,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O26">
+    <dia:object type="Database - Reference" version="0" id="O25">
       <dia:attribute name="obj_pos">
         <dia:point val="5.89,20"/>
       </dia:attribute>
@@ -3281,10 +3181,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O11" connection="1"/>
-        <dia:connection handle="1" to="O25" connection="18"/>
+        <dia:connection handle="1" to="O24" connection="18"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O27">
+    <dia:object type="Database - Reference" version="0" id="O26">
       <dia:attribute name="obj_pos">
         <dia:point val="17.9537,20"/>
       </dia:attribute>
@@ -3343,10 +3243,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O12" connection="1"/>
-        <dia:connection handle="1" to="O25" connection="20"/>
+        <dia:connection handle="1" to="O24" connection="20"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O28">
+    <dia:object type="Database - Reference" version="0" id="O27">
       <dia:attribute name="obj_pos">
         <dia:point val="13.0575,5.1"/>
       </dia:attribute>
@@ -3400,23 +3300,23 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O23" connection="8"/>
-        <dia:connection handle="1" to="O25" connection="15"/>
+        <dia:connection handle="0" to="O22" connection="8"/>
+        <dia:connection handle="1" to="O24" connection="15"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O29">
+    <dia:object type="Database - Reference" version="0" id="O28">
       <dia:attribute name="obj_pos">
-        <dia:point val="30.25,15.05"/>
+        <dia:point val="30.0575,15.05"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="11.86,11.7;30.74,15.05"/>
+        <dia:rectangle val="11.86,11.7;30.5475,15.05"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
-        <dia:point val="30.25,15.05"/>
-        <dia:point val="30.25,12.35"/>
+        <dia:point val="30.0575,15.05"/>
+        <dia:point val="30.0575,12.35"/>
         <dia:point val="11.86,12.35"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
@@ -3459,10 +3359,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O17" connection="1"/>
-        <dia:connection handle="1" to="O25" connection="17"/>
+        <dia:connection handle="1" to="O24" connection="17"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O30">
+    <dia:object type="Database - Reference" version="0" id="O29">
       <dia:attribute name="obj_pos">
         <dia:point val="39.7687,-12.5"/>
       </dia:attribute>
@@ -3521,10 +3421,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O0" connection="8"/>
-        <dia:connection handle="1" to="O23" connection="15"/>
+        <dia:connection handle="1" to="O22" connection="15"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O31">
+    <dia:object type="Database - Table" version="0" id="O30">
       <dia:attribute name="obj_pos">
         <dia:point val="24,3.4"/>
       </dia:attribute>
@@ -3694,7 +3594,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O32">
+    <dia:object type="Database - Reference" version="0" id="O31">
       <dia:attribute name="obj_pos">
         <dia:point val="17.1725,5.1"/>
       </dia:attribute>
@@ -3748,11 +3648,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O23" connection="10"/>
-        <dia:connection handle="1" to="O31" connection="16"/>
+        <dia:connection handle="0" to="O22" connection="10"/>
+        <dia:connection handle="1" to="O30" connection="16"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O33">
+    <dia:object type="Database - Table" version="0" id="O32">
       <dia:attribute name="obj_pos">
         <dia:point val="12,-16"/>
       </dia:attribute>
@@ -3882,7 +3782,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O34">
+    <dia:object type="Database - Table" version="0" id="O33">
       <dia:attribute name="obj_pos">
         <dia:point val="12,-11"/>
       </dia:attribute>
@@ -4012,7 +3912,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O35">
+    <dia:object type="Database - Reference" version="0" id="O34">
       <dia:attribute name="obj_pos">
         <dia:point val="12,-8"/>
       </dia:attribute>
@@ -4070,11 +3970,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O34" connection="16"/>
-        <dia:connection handle="1" to="O23" connection="1"/>
+        <dia:connection handle="0" to="O33" connection="16"/>
+        <dia:connection handle="1" to="O22" connection="1"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O36">
+    <dia:object type="Database - Reference" version="0" id="O35">
       <dia:attribute name="obj_pos">
         <dia:point val="12,-8.8"/>
       </dia:attribute>
@@ -4130,11 +4030,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O34" connection="14"/>
-        <dia:connection handle="1" to="O33" connection="5"/>
+        <dia:connection handle="0" to="O33" connection="14"/>
+        <dia:connection handle="1" to="O32" connection="5"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O37">
+    <dia:object type="Database - Reference" version="0" id="O36">
       <dia:attribute name="obj_pos">
         <dia:point val="38,-15.55"/>
       </dia:attribute>
@@ -4191,10 +4091,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O0" connection="5"/>
-        <dia:connection handle="1" to="O33" connection="15"/>
+        <dia:connection handle="1" to="O32" connection="15"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O38">
+    <dia:object type="Database - Table" version="0" id="O37">
       <dia:attribute name="obj_pos">
         <dia:point val="34,5.4"/>
       </dia:attribute>
@@ -4364,7 +4264,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O39">
+    <dia:object type="Database - Table" version="0" id="O38">
       <dia:attribute name="obj_pos">
         <dia:point val="34,-0.8"/>
       </dia:attribute>
@@ -4514,7 +4414,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O40">
+    <dia:object type="Database - Table" version="0" id="O39">
       <dia:attribute name="obj_pos">
         <dia:point val="21,-10"/>
       </dia:attribute>
@@ -4691,7 +4591,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O41">
+    <dia:object type="Database - Reference" version="0" id="O40">
       <dia:attribute name="obj_pos">
         <dia:point val="34,8.4"/>
       </dia:attribute>
@@ -4747,11 +4647,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O38" connection="16"/>
-        <dia:connection handle="1" to="O31" connection="6"/>
+        <dia:connection handle="0" to="O37" connection="16"/>
+        <dia:connection handle="1" to="O30" connection="6"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O42">
+    <dia:object type="Database - Reference" version="0" id="O41">
       <dia:attribute name="obj_pos">
         <dia:point val="39.92,-0.35"/>
       </dia:attribute>
@@ -4807,11 +4707,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O39" connection="6"/>
-        <dia:connection handle="1" to="O38" connection="15"/>
+        <dia:connection handle="0" to="O38" connection="6"/>
+        <dia:connection handle="1" to="O37" connection="15"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O43">
+    <dia:object type="Database - Reference" version="0" id="O42">
       <dia:attribute name="obj_pos">
         <dia:point val="24.1525,-4.9"/>
       </dia:attribute>
@@ -4865,11 +4765,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O40" connection="9"/>
-        <dia:connection handle="1" to="O39" connection="14"/>
+        <dia:connection handle="0" to="O39" connection="9"/>
+        <dia:connection handle="1" to="O38" connection="14"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O44">
+    <dia:object type="Database - Reference" version="0" id="O43">
       <dia:attribute name="obj_pos">
         <dia:point val="24,5.6"/>
       </dia:attribute>
@@ -4923,11 +4823,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O31" connection="14"/>
-        <dia:connection handle="1" to="O40" connection="8"/>
+        <dia:connection handle="0" to="O30" connection="14"/>
+        <dia:connection handle="1" to="O39" connection="8"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O45">
+    <dia:object type="Database - Table" version="0" id="O44">
       <dia:attribute name="obj_pos">
         <dia:point val="34,-7"/>
       </dia:attribute>
@@ -5077,7 +4977,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O46">
+    <dia:object type="Database - Reference" version="0" id="O45">
       <dia:attribute name="obj_pos">
         <dia:point val="34,-0.35"/>
       </dia:attribute>
@@ -5133,11 +5033,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O39" connection="5"/>
-        <dia:connection handle="1" to="O45" connection="18"/>
+        <dia:connection handle="0" to="O38" connection="5"/>
+        <dia:connection handle="1" to="O44" connection="18"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O47">
+    <dia:object type="Database - Reference" version="0" id="O46">
       <dia:attribute name="obj_pos">
         <dia:point val="41.5375,-12.5"/>
       </dia:attribute>
@@ -5196,10 +5096,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O0" connection="9"/>
-        <dia:connection handle="1" to="O40" connection="17"/>
+        <dia:connection handle="1" to="O39" connection="17"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O48">
+    <dia:object type="Database - Table" version="0" id="O47">
       <dia:attribute name="obj_pos">
         <dia:point val="18.615,-28"/>
       </dia:attribute>
@@ -5329,7 +5229,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O49">
+    <dia:object type="Database - Table" version="0" id="O48">
       <dia:attribute name="obj_pos">
         <dia:point val="30,-28"/>
       </dia:attribute>
@@ -5560,7 +5460,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O50">
+    <dia:object type="Database - Reference" version="0" id="O49">
       <dia:attribute name="obj_pos">
         <dia:point val="43.3062,-16"/>
       </dia:attribute>
@@ -5615,10 +5515,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O0" connection="3"/>
-        <dia:connection handle="1" to="O49" connection="15"/>
+        <dia:connection handle="1" to="O48" connection="15"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O51">
+    <dia:object type="Database - Table" version="0" id="O50">
       <dia:attribute name="obj_pos">
         <dia:point val="19,-23.3"/>
       </dia:attribute>
@@ -5768,7 +5668,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O52">
+    <dia:object type="Database - Reference" version="0" id="O51">
       <dia:attribute name="obj_pos">
         <dia:point val="25.305,-20.3"/>
       </dia:attribute>
@@ -5822,11 +5722,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O51" connection="17"/>
+        <dia:connection handle="0" to="O50" connection="17"/>
         <dia:connection handle="1" to="O0" connection="2"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O53">
+    <dia:object type="Database - Reference" version="0" id="O52">
       <dia:attribute name="obj_pos">
         <dia:point val="25.305,-21.1"/>
       </dia:attribute>
@@ -5882,11 +5782,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O51" connection="15"/>
-        <dia:connection handle="1" to="O48" connection="6"/>
+        <dia:connection handle="0" to="O50" connection="15"/>
+        <dia:connection handle="1" to="O47" connection="6"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O54">
+    <dia:object type="Database - Table" version="0" id="O53">
       <dia:attribute name="obj_pos">
         <dia:point val="10,-25"/>
       </dia:attribute>
@@ -6116,7 +6016,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O55">
+    <dia:object type="Database - Reference" version="0" id="O54">
       <dia:attribute name="obj_pos">
         <dia:point val="16.69,-18"/>
       </dia:attribute>
@@ -6170,11 +6070,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O54" connection="27"/>
+        <dia:connection handle="0" to="O53" connection="27"/>
         <dia:connection handle="1" to="O0" connection="1"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O56">
+    <dia:object type="Database - Table" version="0" id="O55">
       <dia:attribute name="obj_pos">
         <dia:point val="1,-23"/>
       </dia:attribute>
@@ -6284,7 +6184,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Table" version="0" id="O57">
+    <dia:object type="Database - Table" version="0" id="O56">
       <dia:attribute name="obj_pos">
         <dia:point val="1,-19"/>
       </dia:attribute>
@@ -6514,7 +6414,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         </dia:composite>
       </dia:attribute>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O58">
+    <dia:object type="Database - Reference" version="0" id="O57">
       <dia:attribute name="obj_pos">
         <dia:point val="27.345,42.3"/>
       </dia:attribute>
@@ -6573,10 +6473,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       </dia:attribute>
       <dia:connections>
         <dia:connection handle="0" to="O1" connection="9"/>
-        <dia:connection handle="1" to="O57" connection="22"/>
+        <dia:connection handle="1" to="O56" connection="22"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O59">
+    <dia:object type="Database - Reference" version="0" id="O58">
       <dia:attribute name="obj_pos">
         <dia:point val="11,-3.55"/>
       </dia:attribute>
@@ -6632,11 +6532,11 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.59999999999999998"/>
       </dia:attribute>
       <dia:connections>
-        <dia:connection handle="0" to="O23" connection="5"/>
-        <dia:connection handle="1" to="O57" connection="25"/>
+        <dia:connection handle="0" to="O22" connection="5"/>
+        <dia:connection handle="1" to="O56" connection="25"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O60">
+    <dia:object type="Database - Reference" version="0" id="O59">
       <dia:attribute name="obj_pos">
         <dia:point val="38.535,45.4"/>
       </dia:attribute>
@@ -6694,7 +6594,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:connection handle="1" to="O1" connection="10"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O61">
+    <dia:object type="Database - Reference" version="0" id="O60">
       <dia:attribute name="obj_pos">
         <dia:point val="3,33.6"/>
       </dia:attribute>
@@ -6754,7 +6654,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:connection handle="1" to="O1" connection="5"/>
       </dia:connections>
     </dia:object>
-    <dia:object type="Database - Reference" version="0" id="O62">
+    <dia:object type="Database - Reference" version="0" id="O61">
       <dia:attribute name="obj_pos">
         <dia:point val="19,35.4"/>
       </dia:attribute>
