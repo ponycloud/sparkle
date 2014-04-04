@@ -173,7 +173,8 @@ class Twilight(object):
 
         # We only accept data for a few tables.
         if name not in set(('host', 'nic', 'bond', 'net_role', 'host_disk',
-                            'host_storage_pool')):
+                            'host_storage_pool', 'host_image', 'host_extent',
+                            'host_volume')):
             return False
 
         if part is not None:

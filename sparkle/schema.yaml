@@ -125,8 +125,8 @@ event:
 
 extent:
   pkey: uuid
-  mount: {}
   index: [volume]
+  mount: {}
 
 host:
   pkey: uuid
@@ -302,6 +302,25 @@ host_storage_pool:
   mount:
     /host/storage-pool:
       access: protected
+
+host_image:
+  pkey: [host, image]
+  virtual: true
+  mount:
+    /host/image:
+      access: protected
+
+host_volume:
+  pkey: [host, volume]
+  virtual: true
+  mount:
+    /host/volume:
+      access: protected
+
+host_extent:
+  pkey: [host, extent]
+  virtual: true
+  mount: {}
 
 
 # vim:set sw=2 ts=2 et:
