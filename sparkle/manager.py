@@ -242,6 +242,7 @@ class Manager(object):
             filter = dict(endpoint.filter)
             filter.update({pname: keys[pname]})
             rows = self.model[endpoint.table.name].list(**filter)
+
         if isinstance(schema.tables[endpoint.table.name].pkey, basestring):
             # Return rows keyed by the primary key.
             return {row.pkey: row.to_dict() for row in rows}
@@ -256,6 +257,7 @@ class Manager(object):
         """
         Called from API to obtain list of collection items details.
         """
+
         # Verify that collection parent exists.
         self.model.path_row(path[:-1], keys)
 
@@ -275,8 +277,7 @@ class Manager(object):
         if not join:
             return {}
         else:
-            # Return rows keyed by the missing portion of composite
-            # primary key.
+            # Return rows keyed by primary key of joined table.
             to_expand = path[-1]
             if to_expand in join:
                 for key in join:

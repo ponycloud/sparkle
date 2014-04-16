@@ -293,7 +293,7 @@ def make_sparkle_app(manager):
         collection_handler.__name__ = 'c_' + '_'.join(path)
         entity_handler.__name__ = 'e_' + '_'.join(path)
 
-        if not endpoint.table.join:
+        if path[-1] not in endpoint.table.join:
             join_handler = None
         else:
             @app.require_credentials(manager)
@@ -342,7 +342,6 @@ def make_sparkle_app(manager):
 
         if join_handler:
             join_rule = dirname(rule) + '/_join/'
-            print join_rule
             app.route_json(join_rule, methods=['GET'])(join_handler)
 
     # Top-level endpoint for capabilitites reporting.

@@ -54,6 +54,13 @@
 # *user/ro*
 # :    Same as `user/rw`, but user cannot make any changes.
 #
+#
+# There is a possibility for a `join` property, where can be
+# enumerated keys (and according to our standards table names
+# as well) which are used for a special collection endpoint `_join`.
+# This endpoint is used to join data from related tables in collection
+# listing (when you need to list entity details in a collection).
+# Example of this is `cluster_instance`.
 
 address:
   pkey: uuid
