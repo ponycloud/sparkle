@@ -91,6 +91,10 @@ class Table(object):
         self.virtual = table.get('virtual', False)
         self.user_pkey = table.get('user-pkey', self.pkey != 'uuid')
         self.endpoints = {}
+        self.join = set(table.get('join', []))
+
+        if not isinstance(self.pkey, basestring) and not self.join:
+            self.join = self.pkey
 
         if isinstance(self.pkey, basestring):
             self.index.add(self.pkey)

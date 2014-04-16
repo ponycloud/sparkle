@@ -293,7 +293,30 @@ def make_sparkle_app(manager):
         collection_handler.__name__ = 'c_' + '_'.join(path)
         entity_handler.__name__ = 'e_' + '_'.join(path)
 
-        return collection_handler, entity_handler
+        if not endpoint.table.join:
+            join_handler = None
+        else:
+            @app.require_credentials(manager)
+            @convert_errors
+            def join_handler(credentials={}, **keys):
+                jpath = endpoint.to_jpath(keys)[:-2]
+
+                if 'GET' == flask.request.method:
+                    # Make sure all access control restrictions are applied.
+                    validate_dbdict_fragment(credentials, {}, jpath, False)
+
+                    try:
+                        # Let the manager deal with model access and data
+                        # retrieval.  XXX: Access control is broken there, BTW.
+                        data = call_sync(manager.list_collection_join, path, keys)
+                    except KeyError:
+                        raise PathError('not found', jpath)
+
+                    # We promised not to return any nulls in the output.
+                    return remove_nulls(data)
+            join_handler.__name__ = 'j_' + '_'.join(path)
+
+        return collection_handler, entity_handler, join_handler
 
     # Generate entity and collection endpoints.
     for path, endpoint in schema.endpoints.iteritems():
@@ -301,7 +324,7 @@ def make_sparkle_app(manager):
         rule = path_to_rule(path)
 
         # Prepare entity and collection handlers from schema.
-        collection_handler, entity_handler = make_handlers(path)
+        collection_handler, entity_handler, join_handler = make_handlers(path)
 
         if endpoint.table.virtual:
             methods = ['GET']
@@ -316,6 +339,11 @@ def make_sparkle_app(manager):
             methods = ['GET', 'POST', 'PATCH']
 
         app.route_json(dirname(rule) + '/', methods=methods)(collection_handler)
+
+        if join_handler:
+            join_rule = dirname(rule) + '/_join/'
+            print join_rule
+            app.route_json(join_rule, methods=['GET'])(join_handler)
 
     # Top-level endpoint for capabilitites reporting.
     @app.route_json('/')

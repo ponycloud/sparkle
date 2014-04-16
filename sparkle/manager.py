@@ -242,7 +242,6 @@ class Manager(object):
             filter = dict(endpoint.filter)
             filter.update({pname: keys[pname]})
             rows = self.model[endpoint.table.name].list(**filter)
-
         if isinstance(schema.tables[endpoint.table.name].pkey, basestring):
             # Return rows keyed by the primary key.
             return {row.pkey: row.to_dict() for row in rows}
@@ -252,6 +251,38 @@ class Manager(object):
             for key in schema.tables[endpoint.table.name].pkey:
                 if key not in keys:
                     return {row.get(key): row.to_dict() for row in rows}
+
+    def list_collection_join(self, path, keys):
+        """
+        Called from API to obtain list of collection items details.
+        """
+        # Verify that collection parent exists.
+        self.model.path_row(path[:-1], keys)
+
+        # Find endpoint for the collection itself.
+        endpoint = schema.resolve_path(path)
+
+        if endpoint.parent.table is None:
+            # Top-level collections do not have any parents.
+            rows = self.model[endpoint.table.name].list()
+        else:
+            # Filter using the endpoint filter and parent relationship.
+            pname = endpoint.parent.table.name
+            filter = dict(endpoint.filter)
+            filter.update({pname: keys[pname]})
+            rows = self.model[endpoint.table.name].list(**filter)
+        join = schema.tables[endpoint.table.name].join
+        if not join:
+            return {}
+        else:
+            # Return rows keyed by the missing portion of composite
+            # primary key.
+            to_expand = path[-1]
+            if to_expand in join:
+                for key in join:
+                    if key not in keys:
+                        return {row.get(key): self.model[to_expand][row.get(key)].to_dict() for row in rows}
+
 
     def get_entity(self, path, keys):
         """Called from API to obtain entity description."""

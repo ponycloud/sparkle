@@ -83,6 +83,7 @@ cluster:
 
 cluster_instance:
   pkey: uuid
+  join: [cluster, instance]
   mount:
     /tenant/cluster/instance:
       access: tenant/user
