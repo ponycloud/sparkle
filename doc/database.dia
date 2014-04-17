@@ -3375,8 +3375,8 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
       <dia:attribute name="orth_points">
         <dia:point val="39.7687,-12.5"/>
         <dia:point val="39.7687,-11"/>
-        <dia:point val="20,-11"/>
-        <dia:point val="20,-1.8"/>
+        <dia:point val="20.35,-11"/>
+        <dia:point val="20.35,-1.8"/>
         <dia:point val="19.23,-1.8"/>
       </dia:attribute>
       <dia:attribute name="orth_orient">
@@ -3657,7 +3657,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="12,-16"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="12,-16;18.305,-12.5"/>
+        <dia:rectangle val="12,-16;18.305,-11.7"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -3669,7 +3669,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="6.3049999999999997"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
-        <dia:real val="3.5"/>
+        <dia:real val="4.3000000000000007"/>
       </dia:attribute>
       <dia:attribute name="text_colour">
         <dia:color val="#5e0000"/>
@@ -3684,10 +3684,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.10000000000000001"/>
       </dia:attribute>
       <dia:attribute name="name">
-        <dia:string>#cluster#</dia:string>
+        <dia:string>#affinity_group#</dia:string>
       </dia:attribute>
       <dia:attribute name="comment">
-        <dia:string>#Group of instances from that each must be placed on different hosts.#</dia:string>
+        <dia:string>#Group of instances from that each must be placed on the same host or on different hosts (based on the value of `type` property).#</dia:string>
       </dia:attribute>
       <dia:attribute name="visible_comment">
         <dia:boolean val="false"/>
@@ -3748,7 +3748,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#uuid#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#Cluster owner.#</dia:string>
+            <dia:string>#Affinity group owner.#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>
@@ -3768,7 +3768,27 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
             <dia:string>#varchar#</dia:string>
           </dia:attribute>
           <dia:attribute name="comment">
-            <dia:string>#Human-readable name of the cluster. Must be unique per tenant.#</dia:string>
+            <dia:string>#Human-readable name of the affinity group. Must be unique per tenant.#</dia:string>
+          </dia:attribute>
+          <dia:attribute name="primary_key">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+          <dia:attribute name="nullable">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+          <dia:attribute name="unique">
+            <dia:boolean val="false"/>
+          </dia:attribute>
+        </dia:composite>
+        <dia:composite type="table_attribute">
+          <dia:attribute name="name">
+            <dia:string>#type#</dia:string>
+          </dia:attribute>
+          <dia:attribute name="type">
+            <dia:string>#enum#</dia:string>
+          </dia:attribute>
+          <dia:attribute name="comment">
+            <dia:string>#{affinity, anti-affinity}#</dia:string>
           </dia:attribute>
           <dia:attribute name="primary_key">
             <dia:boolean val="false"/>
@@ -3787,7 +3807,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="12,-11"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="12,-11;17.92,-7.5"/>
+        <dia:rectangle val="12,-11;19.82,-7.5"/>
       </dia:attribute>
       <dia:attribute name="meta">
         <dia:composite type="dict"/>
@@ -3796,7 +3816,7 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:point val="12,-11"/>
       </dia:attribute>
       <dia:attribute name="elem_width">
-        <dia:real val="5.9199999999999999"/>
+        <dia:real val="7.8200000000000003"/>
       </dia:attribute>
       <dia:attribute name="elem_height">
         <dia:real val="3.5"/>
@@ -3814,10 +3834,10 @@ It can also be NULL if we are directly attaching a read only image.#</dia:string
         <dia:real val="0.10000000000000001"/>
       </dia:attribute>
       <dia:attribute name="name">
-        <dia:string>#cluster_instance#</dia:string>
+        <dia:string>#affinity_group_instance#</dia:string>
       </dia:attribute>
       <dia:attribute name="comment">
-        <dia:string>#Instance membership in a cluster.#</dia:string>
+        <dia:string>#Instance membership in an affinity group.#</dia:string>
       </dia:attribute>
       <dia:attribute name="visible_comment">
         <dia:boolean val="false"/>

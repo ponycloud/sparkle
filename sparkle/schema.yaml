@@ -60,7 +60,7 @@
 # as well) which are used for a special collection endpoint `_join`.
 # This endpoint is used to join data from related tables in collection
 # listing (when you need to list entity details in a collection).
-# Example of this is `cluster_instance`.
+# Example of this is `affinity_group_instance`.
 
 address:
   pkey: uuid
@@ -82,20 +82,20 @@ bond:
     /host/bond:
       access: protected
 
-cluster:
+affinity_group:
   pkey: uuid
   mount:
-    /tenant/cluster:
+    /tenant/affinity_group:
       access: tenant/user
 
-cluster_instance:
+affinity_group_instance:
   pkey: uuid
-  join: [cluster, instance]
+  join: [instance]
   mount:
-    /tenant/cluster/instance:
+    /tenant/affinity_group/instance:
       access: tenant/user
 
-    /tenant/instance/cluster:
+    /tenant/instance/affinity_group:
       access: tenant/user
 
 config:
