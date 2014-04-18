@@ -38,6 +38,7 @@ class Endpoint(object):
             'fkeys': list(self.table.fkeys),
             'table': self.table.name,
             'access': self.access,
+            'join': list(self.table.join),
             'children': {name: child.public
                          for name, child in self.children.iteritems()
                          if child.access not in ('private',)}

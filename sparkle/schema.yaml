@@ -85,17 +85,17 @@ bond:
 affinity_group:
   pkey: uuid
   mount:
-    /tenant/affinity_group:
+    /tenant/affinity-group:
       access: tenant/user
 
 affinity_group_instance:
   pkey: uuid
   join: [instance]
   mount:
-    /tenant/affinity_group/instance:
+    /tenant/affinity-group/instance:
       access: tenant/user
 
-    /tenant/instance/affinity_group:
+    /tenant/instance/affinity-group:
       access: tenant/user
 
 config:
