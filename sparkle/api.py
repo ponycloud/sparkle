@@ -184,7 +184,7 @@ def make_sparkle_app(manager):
                     validate_dbdict_fragment(creds, {}, op['from'], False)
 
                 # Remove None keys from values of non-merge operations.
-                if 'value' in op and 'merge' != op['op']:
+                if 'value' in op and 'x-merge' != op['op']:
                     op['value'] = remove_nulls(op['value'])
 
             # Run the patch and hope for the best?
