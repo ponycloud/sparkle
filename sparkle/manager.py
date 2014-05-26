@@ -277,12 +277,17 @@ class Manager(object):
         if not join:
             return {}
         else:
+            items = {}
             # Return rows keyed by primary key of joined table.
             to_expand = path[-1]
             if to_expand in join:
                 for key in join:
                     if key not in keys:
-                        return {row.get(key): self.model[to_expand][row.get(key)].to_dict() for row in rows}
+                        for row in rows:
+                            items[row.get(key)] = self.model[to_expand][row.get(key)].to_dict()
+                            # Add data of the joining object
+                            items[row.get(key)]['joined'] = {row.pkey: row.to_dict()}
+                        return items
 
 
     def get_entity(self, path, keys):
