@@ -148,6 +148,9 @@ def validate_dbdict(creds, data, write):
                 raise AccessError('administrator access required', path)
 
     def auth_entity(ep, path):
+        if alicorn:
+            return
+
         if ep.table.name == 'tenant':
             if not tenant:
                 raise AccessError('missing tenant credentials', path)
