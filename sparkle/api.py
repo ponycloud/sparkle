@@ -15,7 +15,7 @@ authentication.
 __all__ = ['make_sparkle_app']
 
 from sqlalchemy.exc import DatabaseError
-from werkzeug.exceptions import NotFound, Unauthorized
+from werkzeug.exceptions import Forbidden, NotFound, Unauthorized
 from simplejson import loads, dumps
 from functools import wraps
 from os.path import dirname
@@ -392,12 +392,13 @@ def make_sparkle_app(manager):
         user = call_sync(manager.model['user'].get, credentials['user'])
 
         if user is None or not user.desired.get('alicorn'):
-            member = call_sync(manager.model['member'].one,
-                               tenant=tenant,
-                               user=credentials['user'])
+            try:
+                member = call_sync(manager.model['member'].one,
+                                   tenant=tenant,
+                                   user=credentials['user'])
+            except KeyError:
+                raise Forbidden('you are not a member of the tenant')
 
-            if member is None:
-                raise Unauthorized('you are not a member of the tenant')
 
         # Bestow project owner role for alicorns
         if user.desired.get('alicorn'):
