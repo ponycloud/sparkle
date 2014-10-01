@@ -405,8 +405,8 @@ class Row(object):
                     tenants.add(row.pkey)
                     break
 
-                key = self.get_current(mnt.parent.table.name)
-                key = self.get_desired(mnt.parent.table.name, key)
+                key = row.get_current(mnt.parent.table.name)
+                key = row.get_desired(mnt.parent.table.name, key)
 
                 if key is None:
                     break
