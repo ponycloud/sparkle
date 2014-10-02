@@ -9,7 +9,9 @@ from twisted.web.wsgi import WSGIResource
 from sparkle.tzmq import Router
 
 # Data are stored in a PostgreSQL database.
-import sqlsoup
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import create_engine
+from sqlsoup import SQLSoup
 
 # Command line arguments follow the GNU conventions.
 from getopt import gnu_getopt, GetoptError
@@ -28,7 +30,11 @@ if __name__ == '__main__':
                     .bind(config.get('zmq', 'endpoint'))
 
         # Prepare the database connection.
-        db = sqlsoup.SQLSoup(config.get('db', 'url'))
+        engine = create_engine(config.get('db', 'url'),
+                               isolation_level='SERIALIZABLE')
+        session = scoped_session(sessionmaker(autocommit=False,
+                                              autoflush=False))
+        db = SQLSoup(engine, session=session)
 
         # Prepare the WS notifier.
         notifier = Notifier(config.get('ws', 'url'), debugWamp=True)
