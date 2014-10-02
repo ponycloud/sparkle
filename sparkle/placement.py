@@ -106,9 +106,14 @@ class Placement(object):
     def repair_host(self, row):
         yield row.pkey
 
+    def repair_vlan(self, row):
+        yield row.m.bond[row.d.bond].d.host
+
     def damage_bond(self, row):
         for net_role in row.m.net_role.list(bond=row.pkey):
             yield net_role
+        for vlan in row.m.vlan.list(bond=row.pkey):
+            yield vlan
 
     def repair_bond(self, row):
         yield row.d.host
