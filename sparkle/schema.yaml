@@ -136,6 +136,10 @@ extent:
   index: [volume]
   mount: {}
 
+vlan:
+  pkey: [bond, tag]
+  mount: {}
+
 host:
   pkey: uuid
   user-pkey: true
