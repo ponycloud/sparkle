@@ -235,7 +235,9 @@ class Manager(object):
 
         if endpoint.parent.table is None:
             # Top-level collections do not have any parents.
-            rows = self.model[endpoint.table.name].list()
+            # Filter using the endpoint filter
+            filter = dict(endpoint.filter)
+            rows = self.model[endpoint.table.name].list(**filter)
         else:
             # Filter using the endpoint filter and parent relationship.
             pname = endpoint.parent.table.name
