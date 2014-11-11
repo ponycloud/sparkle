@@ -1,7 +1,6 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-import scrypt
 import os
 
 from simplejson import loads
